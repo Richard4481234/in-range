@@ -164,6 +164,13 @@
           border-radius:7px;padding:11px 13px;font-size:12.5px;color:var(--muted);
           margin-bottom:14px;line-height:1.55}
   .lesson b{color:var(--warn)}
+  table.cmp{width:100%;border-collapse:collapse;font-size:13px;min-width:660px}
+  table.cmp th{text-align:left;color:var(--dim);font-size:10.5px;text-transform:uppercase;
+               letter-spacing:.6px;padding:7px 9px;border-bottom:1px solid var(--line);font-weight:700}
+  table.cmp td{padding:10px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.cmp tr:last-child td{border-bottom:0}
+  table.cmp td.win{color:var(--good);font-weight:700}
+  table.cmp .ci{color:var(--dim);font-size:11px}
 
   .pager{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:18px;flex-wrap:wrap}
   .pager button{background:var(--panel);border:1px solid var(--line);color:var(--muted);
@@ -465,6 +472,18 @@
       <div class="pager" id="pager"></div>
     </div>
 
+    <div class="card" id="compareCard" style="display:none">
+      <div class="cardhead">
+        <h2>Comparing your list</h2>
+        <button class="btn ghost" id="closeCompare">Close</button>
+      </div>
+      <div style="overflow-x:auto"><table class="cmp" id="cmpTable"></table></div>
+      <div class="hint" style="margin-top:12px">
+        Cost is the all-in annual figure — tuition plus housing, food, books and fees.
+        Graduation rate is the share finishing within six years.
+      </div>
+    </div>
+
     <div class="card" id="peopleView" style="display:none">
       <div class="bigwarn">
         <b>These are anecdotes, not statistics.</b> Every profile below was written by someone who chose to
@@ -499,6 +518,10 @@
         <div class="field" style="max-width:220px;margin:0">
           <label class="lbl" for="pGpa">Your unweighted GPA (optional)</label>
           <input type="number" id="pGpa" min="0" max="4" step="0.01" placeholder="e.g. 3.9">
+        </div>
+        <div class="field" style="max-width:250px;margin:0">
+          <label class="lbl" for="pQ">Search activities, major, background</label>
+          <input type="text" id="pQ" placeholder="research, debate, first-gen…">
         </div>
         <div class="field" style="margin:0">
           <label class="lbl" style="display:flex;align-items:center;gap:7px;cursor:pointer">
@@ -797,6 +820,7 @@ function renderList() {
   if (!myList.length) {
     $("listBody").innerHTML = `<div class="hint" style="margin:0">
       Add schools to see whether your list is balanced.</div>`;
+    $("compareCard").style.display = "none";
     return;
   }
   const cats = { likely: 0, target: 0, reach: 0, hard: 0, none: 0 };
@@ -834,9 +858,49 @@ function renderList() {
         <button data-del="${s.id}" title="Remove">×</button></div>`;
     }).join("") +
     `</div><div class="btnrow">
+       <button class="btn ghost" id="compareBtn">Compare</button>
        <button class="btn ghost" id="exportBtn">Export list</button>
        <button class="btn ghost" id="clearBtn">Clear</button>
      </div>`;
+  if ($("compareCard").style.display !== "none") renderCompare();
+}
+
+/* Side-by-side table of the shortlist — the thing people otherwise rebuild
+   by hand in a spreadsheet. Best value in each column is highlighted. */
+function renderCompare() {
+  const rows = myList.map(i => findSchool(i.id) || i);
+  if (!rows.length) { $("compareCard").style.display = "none"; return; }
+
+  const pick = (vals, cmp) => {
+    const nums = vals.filter(v => v !== null && v !== undefined);
+    return nums.length ? nums.reduce(cmp) : null;
+  };
+  const hiGrad = pick(rows.map(r => r.grad_rate), (a, b) => Math.max(a, b));
+  const loCost = pick(rows.map(r => r.cost), (a, b) => Math.min(a, b));
+  const hiAdm  = pick(rows.map(r => r.admit_rate), (a, b) => Math.max(a, b));
+
+  const cell = (v, win, fmt) =>
+    `<td${v !== null && v !== undefined && v === win ? ' class="win"' : ""}>${
+      v === null || v === undefined ? "—" : fmt(v)}</td>`;
+
+  $("cmpTable").innerHTML =
+    `<thead><tr><th>School</th><th>Admit rate</th><th>${state.test.toUpperCase()} middle 50%</th>
+      <th>Cost / yr</th><th>Graduate</th><th>Size</th><th></th></tr></thead><tbody>` +
+    rows.map(s => {
+      const [lo, hi] = range(s);
+      const cls = classify(s);
+      return `<tr>
+        <td><b>${s.name}</b><br><span class="ci">${[s.city, s.state].filter(Boolean).join(", ")}${
+          cls ? ` · ${CHIP[cls][0]}` : ""}</span></td>
+        ${cell(s.admit_rate, hiAdm, v => pct(v))}
+        <td>${lo === null ? "—" : lo + "–" + hi}</td>
+        ${cell(s.cost, loCost, v => money(v))}
+        ${cell(s.grad_rate, hiGrad, v => Math.round(v * 100) + "%")}
+        <td>${s.size ? s.size.toLocaleString() : "—"}</td>
+        <td><button class="addbtn" data-del="${s.id}">Remove</button></td>
+      </tr>`;
+    }).join("") + `</tbody>`;
+  $("compareCard").style.display = "";
 }
 
 /* ---------- events ---------- */
@@ -924,6 +988,17 @@ $("listBody").addEventListener("click", e => {
   if (del) { myList = myList.filter(x => !sameId(x.id, del.dataset.del)); saveList(); render(); return; }
   if (e.target.closest("#clearBtn")) { myList = []; saveList(); render(); return; }
   if (e.target.closest("#exportBtn")) exportList();
+  if (e.target.closest("#compareBtn")) {
+    renderCompare();
+    const c = $("compareCard");
+    if (c.scrollIntoView) c.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+});
+$("closeCompare").addEventListener("click", () => { $("compareCard").style.display = "none"; });
+$("cmpTable").addEventListener("click", e => {
+  const del = e.target.closest("[data-del]"); if (!del) return;
+  myList = myList.filter(x => !sameId(x.id, del.dataset.del));
+  saveList(); render();
 });
 
 function exportList() {
@@ -1039,7 +1114,21 @@ let PEOPLE_BY_COLLEGE = {};   // Scorecard id -> count of applicants
 const P_PER_PAGE = 15;
 const P_BANDS = { tight: { gpa: 0.03, score: 20 }, standard: { gpa: 0.07, score: 40 },
                   loose: { gpa: 0.15, score: 80 }, all: null };
-const pState = { band: "standard", gpa: null, page: 1, completeOnly: false, school: "", outcome: "" };
+const pState = { band: "standard", gpa: null, page: 1, completeOnly: false,
+                 school: "", outcome: "", q: "" };
+
+/* Free-text search across everything a person wrote about themselves —
+   activities, intended major, demographics, and the schools they applied to. */
+function personMatches(p, q) {
+  if ((p.major || "").toLowerCase().includes(q)) return true;
+  if ((p.ethnicity || "").toLowerCase().includes(q)) return true;
+  if ((p.gender || "").toLowerCase().includes(q)) return true;
+  if ((p.income || "").toLowerCase().includes(q)) return true;
+  if ((p.hook || "").toLowerCase().includes(q)) return true;
+  if ((p.ecs || []).some(e => e.toLowerCase().includes(q))) return true;
+  if (p.apps.some(a => a.school.toLowerCase().includes(q))) return true;
+  return false;
+}
 const isComplete = p => p.apps.some(a => a.result === "rejected" || a.result === "waitlisted");
 let currentView = "colleges";
 
@@ -1060,6 +1149,10 @@ function peopleFiltered() {
     ? (ACT_TO_SAT_P[Math.round(state.score)] || null)
     : state.score;
   let base = pState.completeOnly ? PEOPLE.filter(isComplete) : PEOPLE;
+  if (pState.q) {
+    const q = pState.q.toLowerCase();
+    base = base.filter(p => personMatches(p, q));
+  }
   if (pState.school) {
     base = base.filter(p => p.apps.some(a => a.school === pState.school &&
       (!pState.outcome || a.result === pState.outcome)));
@@ -1111,7 +1204,9 @@ function personHtml(p) {
                              : `<span style="color:var(--dim)">no score reported</span>`;
   const meta = [p.major, p.ethnicity, p.gender,
                 p.residency ? (p.residency === "domestic" ? "Domestic" : "International") : null,
-                p.income ? `income ${p.income}` : null].filter(Boolean).join(" · ");
+                p.income ? `income ${p.income}` : null,
+                p.hook ? `<span style="color:var(--accent)">${p.hook}</span>` : null
+               ].filter(Boolean).join(" · ");
   const acc = p.apps.filter(a => a.result === "accepted");
   const wl  = p.apps.filter(a => a.result === "waitlisted");
   const rej = p.apps.filter(a => a.result === "rejected");
@@ -1253,6 +1348,7 @@ $("views").addEventListener("click", e => {
 $("pBand").addEventListener("change", e => { pState.band = e.target.value; pState.page = 1; renderPeople(); });
 $("pGpa").addEventListener("input", e => { pState.gpa = num(e.target.value); pState.page = 1; renderPeople(); });
 $("pComplete").addEventListener("change", e => { pState.completeOnly = e.target.checked; pState.page = 1; renderPeople(); });
+$("pQ").addEventListener("input", e => { pState.q = e.target.value.trim(); pState.page = 1; renderPeople(); });
 $("peoplePager").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b || b.disabled) return;
   pState.page = +b.dataset.pp; renderPeople();

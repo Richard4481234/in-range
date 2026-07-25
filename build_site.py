@@ -30,7 +30,31 @@ PSTART, PEND = "/*<<<PEOPLE>>>*/", "/*<<<ENDPEOPLE>>>*/"
 
 # Community profile fields. `apps` is packed as [school, round, result] triples.
 PCOLS = ["gpa", "gpa_weighted", "gpa_from_percent", "sat", "act", "unified",
-         "ethnicity", "gender", "residency", "major", "income", "cycle", "ecs", "apps"]
+         "ethnicity", "gender", "residency", "major", "income", "hook",
+         "cycle", "ecs", "apps"]
+
+# The subreddit's post template contains instruction text. Posters who don't
+# delete it leave lines like "List all extracurricular involvements, including
+# leadership roles..." which then get stored as if they were activities.
+BOILERPLATE = re.compile(
+    r"list all|including leadership|time commitment|e\.?g\.?[,:]|"
+    r"\(optional\)|in order of importance|be specific|feel free to|"
+    r"^\s*(activities|awards|honors|extracurriculars?)\s*:?\s*$|"
+    r"delete this|remove this|template", re.I)
+
+
+def clean_ecs(items) -> list[str]:
+    out = []
+    for e in (items or []):
+        s = str(e).strip()
+        if len(s) < 4 or len(s) > 160:
+            continue
+        if BOILERPLATE.search(s):
+            continue
+        out.append(s[:120])
+        if len(out) == 5:
+            break
+    return out
 
 
 # ---------------------------------------------------------------------
@@ -167,9 +191,12 @@ def pack_people(path: str) -> dict:
             if c == "apps":
                 row.append(apps)
             elif c == "ecs":
-                row.append([str(e)[:120] for e in (p.get("ecs") or [])][:5])
+                row.append(clean_ecs(p.get("ecs")))
             elif c == "income":
                 row.append(norm_income(p.get("income")))
+            elif c == "hook":
+                h = p.get("hook")
+                row.append(str(h)[:80] if h and not BOILERPLATE.search(str(h)) else None)
             else:
                 v = p.get(c)
                 row.append(round(v, 3) if isinstance(v, float) else v)
