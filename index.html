@@ -143,6 +143,15 @@
   .schoolfilter button{background:transparent;border:1px solid var(--line);color:var(--muted);
                        border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit}
   .schoolfilter button:hover{color:var(--text);border-color:var(--accent)}
+  .obar{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+  .obtn{background:var(--panel-2);border:1px solid var(--line);color:var(--muted);border-radius:7px;
+        padding:6px 12px;font-size:12.5px;cursor:pointer;font-family:inherit}
+  .obtn:hover{color:var(--text);border-color:var(--accent)}
+  .obtn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .lesson{background:var(--warn-soft);border:1px solid var(--line);border-left:3px solid var(--warn);
+          border-radius:7px;padding:11px 13px;font-size:12.5px;color:var(--muted);
+          margin-bottom:14px;line-height:1.55}
+  .lesson b{color:var(--warn)}
 
   .pager{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:18px;flex-wrap:wrap}
   .pager button{background:var(--panel);border:1px solid var(--line);color:var(--muted);
@@ -368,7 +377,11 @@
       <div class="field">
         <label class="lbl"><input type="checkbox" id="onlyScored" style="width:auto;margin-right:6px">Only schools reporting scores</label>
       </div>
-      <div class="btnrow"><button class="btn ghost" id="resetBtn">Reset filters</button></div>
+      <div class="btnrow">
+        <button class="btn ghost" id="resetBtn">Reset filters</button>
+        <button class="btn ghost" id="shareBtn">Copy link</button>
+      </div>
+      <div class="hint" style="margin-top:8px">The link carries everything on screen — filters, score, and which tab you're on.</div>
     </div>
 
     <div class="card" id="listCard">
@@ -745,6 +758,7 @@ function render() {
        <span class="pinfo">Page ${state.page} of ${pages}</span>
        <button ${state.page === pages ? "disabled" : ""} data-p="${state.page + 1}">Next ›</button>` : "";
   renderList();
+  writeUrl();
 }
 
 function renderList() {
@@ -855,7 +869,11 @@ $("schoolFilter").addEventListener("click", e => {
     setView("colleges"); render();
     return;
   }
-  if (e.target.closest("[data-clearschool]")) { pState.school = ""; pState.page = 1; renderPeople(); }
+  if (e.target.closest("[data-clearschool]")) {
+    pState.school = ""; pState.outcome = ""; pState.page = 1; renderPeople(); return;
+  }
+  const o = e.target.closest("[data-outcome]");
+  if (o) { pState.outcome = o.dataset.outcome; pState.page = 1; renderPeople(); }
 });
 
 $("results").addEventListener("click", e => {
@@ -990,7 +1008,7 @@ let PEOPLE_BY_COLLEGE = {};   // Scorecard id -> count of applicants
 const P_PER_PAGE = 15;
 const P_BANDS = { tight: { gpa: 0.03, score: 20 }, standard: { gpa: 0.07, score: 40 },
                   loose: { gpa: 0.15, score: 80 }, all: null };
-const pState = { band: "standard", gpa: null, page: 1, completeOnly: false, school: "" };
+const pState = { band: "standard", gpa: null, page: 1, completeOnly: false, school: "", outcome: "" };
 const isComplete = p => p.apps.some(a => a.result === "rejected" || a.result === "waitlisted");
 let currentView = "colleges";
 
@@ -1011,7 +1029,10 @@ function peopleFiltered() {
     ? (ACT_TO_SAT_P[Math.round(state.score)] || null)
     : state.score;
   let base = pState.completeOnly ? PEOPLE.filter(isComplete) : PEOPLE;
-  if (pState.school) base = base.filter(p => p.apps.some(a => a.school === pState.school));
+  if (pState.school) {
+    base = base.filter(p => p.apps.some(a => a.school === pState.school &&
+      (!pState.outcome || a.result === pState.outcome)));
+  }
   if (!b) return { rows: base, excluded: 0 };
   let excluded = 0;
   const rows = base.filter(p => {
@@ -1094,12 +1115,44 @@ function renderSchoolFilter() {
   if (!pState.school) { $("schoolFilter").innerHTML = ""; return; }
   const cid = SCHOOL_LINKS[pState.school];
   const col = cid !== undefined ? findSchool(cid) : null;
+
+  // outcome counts within this school, across the whole community sample
+  const pool = pState.completeOnly ? PEOPLE.filter(isComplete) : PEOPLE;
+  const n = { accepted: 0, rejected: 0, waitlisted: 0 };
+  pool.forEach(p => p.apps.forEach(a => { if (a.school === pState.school) n[a.result]++; }));
+  const total = n.accepted + n.rejected + n.waitlisted;
+
+  const tab = (key, label, count) =>
+    `<button class="obtn${pState.outcome === key ? " on" : ""}" data-outcome="${key}">${label} ${count}</button>`;
+
+  /* The community share differs wildly from the official rate. Rather than hide
+     that, show both side by side — it is the clearest possible demonstration of
+     why these profiles cannot be used to estimate anyone's odds. */
+  let lesson = "";
+  if (col && col.admit_rate !== null && total >= 25) {
+    const share = Math.round(100 * n.accepted / total);
+    const real = Math.round(100 * col.admit_rate);
+    if (share > real + 5) {
+      lesson = `<div class="lesson"><b>${share}% of these posters were admitted. The real
+        admission rate is ${real}%.</b> Same school, wildly different numbers — because people
+        who get in are far likelier to write a post about it. That gap is exactly why this
+        page shows you individual stories and never a rate.</div>`;
+    }
+  }
+
   $("schoolFilter").innerHTML = `<div class="schoolfilter">
-    <div>Showing only people who applied to <b>${col ? col.name : pState.school}</b></div>
-    <div style="display:flex;gap:7px">
-      ${col ? `<button data-backto="${col.id}">See its official data</button>` : ""}
-      <button data-clearschool="1">Show everyone</button>
-    </div></div>`;
+      <div>Showing people who applied to <b>${col ? col.name : pState.school}</b></div>
+      <div style="display:flex;gap:7px">
+        ${col ? `<button data-backto="${col.id}">See its official data</button>` : ""}
+        <button data-clearschool="1">Show everyone</button>
+      </div>
+    </div>
+    <div class="obar">
+      ${tab("", "All", total)}
+      ${tab("accepted", "Admitted", n.accepted)}
+      ${tab("waitlisted", "Waitlisted", n.waitlisted)}
+      ${tab("rejected", "Rejected", n.rejected)}
+    </div>${lesson}`;
 }
 
 function renderPeople() {
@@ -1134,6 +1187,7 @@ function renderPeople() {
     ? `<button ${pState.page === 1 ? "disabled" : ""} data-pp="${pState.page - 1}">‹ Prev</button>
        <span class="pinfo">Page ${pState.page} of ${pages}</span>
        <button ${pState.page === pages ? "disabled" : ""} data-pp="${pState.page + 1}">Next ›</button>` : "";
+  writeUrl();
 }
 
 function setView(v) {
@@ -1144,7 +1198,7 @@ function setView(v) {
   // the college filter panel is meaningless in the applicant view
   const fc = document.querySelectorAll("aside .card")[1];
   if (fc) fc.style.display = v === "colleges" ? "" : "none";
-  if (v === "people") renderPeople();
+  if (v === "people") renderPeople(); else writeUrl();
 }
 
 $("views").addEventListener("click", e => {
@@ -1159,6 +1213,87 @@ $("peoplePager").addEventListener("click", e => {
   pState.page = +b.dataset.pp; renderPeople();
   const m = document.querySelector("main");
   if (m && m.scrollIntoView) m.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+/* ===================================================================
+   SHAREABLE URLS
+   Every filter lives in the query string, so any view can be linked,
+   bookmarked or sent to someone.
+   =================================================================== */
+let urlReady = false;
+
+function writeUrl() {
+  if (!urlReady) return;
+  const q = new URLSearchParams();
+  if (currentView !== "colleges") q.set("view", currentView);
+  if (state.score !== null) { q.set("score", state.score); if (state.test !== "sat") q.set("test", state.test); }
+  if (state.q) q.set("q", state.q);
+  if (state.stateF) q.set("st", state.stateF);
+  if (state.control) q.set("type", state.control);
+  [["admMin","amin"],["admMax","amax"],["sizeMin","smin"],["sizeMax","smax"],
+   ["tuitionMax","tmax"],["gradMin","gmin"]].forEach(([k, p]) => {
+    if (state[k] !== null) q.set(p, state[k]);
+  });
+  if (state.onlyScored) q.set("scored", "1");
+  if (state.sort !== "selectivity") q.set("sort", state.sort);
+  if (pState.school) q.set("school", pState.school);
+  if (pState.outcome) q.set("out", pState.outcome);
+  if (pState.band !== "standard") q.set("band", pState.band);
+  if (pState.gpa !== null) q.set("gpa", pState.gpa);
+  if (pState.completeOnly) q.set("full", "1");
+  const s = q.toString();
+  history.replaceState(null, "", location.pathname + (s ? "?" + s : ""));
+}
+
+function readUrl() {
+  const q = new URLSearchParams(location.search);
+  if (!q.toString()) return null;
+  const n = k => { const v = q.get(k); const f = parseFloat(v); return v === null || isNaN(f) ? null : f; };
+  if (q.get("test") === "act") state.test = "act";
+  state.score = n("score");
+  state.q = q.get("q") || "";
+  state.stateF = q.get("st") || "";
+  state.control = q.get("type") || "";
+  state.admMin = n("amin"); state.admMax = n("amax");
+  state.sizeMin = n("smin"); state.sizeMax = n("smax");
+  state.tuitionMax = n("tmax"); state.gradMin = n("gmin");
+  state.onlyScored = q.get("scored") === "1";
+  if (q.get("sort")) state.sort = q.get("sort");
+  pState.school = q.get("school") || "";
+  pState.outcome = q.get("out") || "";
+  if (P_BANDS[q.get("band")] !== undefined) pState.band = q.get("band");
+  pState.gpa = n("gpa");
+  pState.completeOnly = q.get("full") === "1";
+  return q.get("view") === "people" ? "people" : "colleges";
+}
+
+function syncControls() {
+  $("score").value = state.score ?? "";
+  $("q").value = state.q;
+  $("fState").value = state.stateF;
+  $("fControl").value = state.control;
+  $("admMin").value = state.admMin ?? ""; $("admMax").value = state.admMax ?? "";
+  $("sizeMin").value = state.sizeMin ?? ""; $("sizeMax").value = state.sizeMax ?? "";
+  $("tuitionMax").value = state.tuitionMax ?? ""; $("gradMin").value = state.gradMin ?? "";
+  $("onlyScored").checked = state.onlyScored;
+  $("sort").value = state.sort;
+  $("pBand").value = pState.band;
+  $("pGpa").value = pState.gpa ?? "";
+  $("pComplete").checked = pState.completeOnly;
+  [...$("testType").children].forEach(b => b.setAttribute("aria-pressed", b.dataset.t === state.test));
+  $("score").placeholder = state.test === "act" ? "31" : "1400";
+}
+
+$("shareBtn").addEventListener("click", () => {
+  const url = location.href;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(url).then(() => toast("Link copied"), () => toast("Copy failed"));
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = url; document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast("Link copied"); } catch (e) { toast("Copy failed"); }
+    document.body.removeChild(ta);
+  }
 });
 
 /* ---------- boot ---------- */
@@ -1179,10 +1314,16 @@ if (PEOPLE_PACKED) {
   PEOPLE_BY_COLLEGE = seen;
   if (PEOPLE.length) $("views").style.display = "";
 }
+const wantView = readUrl();
 if (PACKED) {
   install(unpack(PACKED), Object.assign({ embedded: true }, PACKED.meta || {}));
+  syncControls();
+  urlReady = true;
+  setView(wantView === "people" && PEOPLE.length ? "people" : "colleges");
+  render();
 } else {
   updateSrc();
+  urlReady = true;
   render();
   // No data built in — pick up a sibling colleges.json when served over http.
   if (typeof fetch === "function" && (location.protocol === "http:" || location.protocol === "https:")) {
