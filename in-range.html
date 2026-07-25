@@ -1083,6 +1083,20 @@ function outcomeRow(cls, label, apps) {
         : "none reported"}</div></div>`;
 }
 
+/* Some posters give only a weighted GPA, or only a percentage. Show what they
+   actually reported and label it, rather than a bare dash or a number on an
+   unstated scale — a 4.35 weighted is not comparable to a 4.0 unweighted. */
+function gpaText(p) {
+  if (p.gpa !== null && p.gpa !== undefined) {
+    return `GPA <b>${p.gpa.toFixed(2)}</b>${
+      p.gpa_from_percent ? ` <span class="rnd">(converted from %)</span>` : ""}`;
+  }
+  if (p.gpa_weighted) {
+    return `GPA <b>${p.gpa_weighted.toFixed(2)}</b> <span class="rnd">weighted</span>`;
+  }
+  return `<span style="color:var(--dim)">GPA not reported</span>`;
+}
+
 function personHtml(p) {
   const sc = [];
   if (p.sat) sc.push(`SAT <b>${p.sat}</b>`);
@@ -1098,7 +1112,7 @@ function personHtml(p) {
   const partial = acc.length > 0 && wl.length === 0 && rej.length === 0;
   return `<div class="anec${partial ? " partial" : ""}">
     <div class="ahead">
-      <div class="astats">GPA <b>${p.gpa === null ? "—" : p.gpa.toFixed(2)}</b><span class="asep">·</span>${scoreTxt}</div>
+      <div class="astats">${gpaText(p)}<span class="asep">·</span>${scoreTxt}</div>
       <div class="aid">${p.cycle ? p.cycle + " cycle" : ""}</div>
     </div>
     ${meta ? `<div class="ameta">${meta}</div>` : ""}

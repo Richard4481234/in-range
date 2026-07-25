@@ -410,19 +410,53 @@ def bullets(block: str) -> list[str]:
 # =====================================================================
 # Field parsers
 # =====================================================================
-def parse_gpa(text: str) -> float | None:
-    raw = field(text, "GPA", "Unweighted GPA", "UW GPA")
+# Standard US percentage-to-4.0 conversion, used only when a poster reports
+# on a 100-point scale and gives no 4.0 figure.
+PCT_TO_GPA = [(97, 4.0), (93, 4.0), (90, 3.7), (87, 3.3), (83, 3.0), (80, 2.7),
+              (77, 2.3), (73, 2.0), (70, 1.7), (67, 1.3), (65, 1.0)]
+
+
+def parse_gpa(text: str) -> tuple[float | None, float | None, bool]:
+    """Returns (unweighted, weighted, converted_from_100_scale).
+
+    Weighted GPAs are captured but kept separate and never used for matching:
+    schools cap them at 4.5, 5.0 or 6.0, so they aren't comparable to each
+    other, let alone to an unweighted figure.
+    """
+    raw = field(text, "GPA", "Unweighted GPA", "UW GPA", "Cumulative GPA",
+                "Academic GPA", "Unweighted", "GPA UW")
     if not raw:
-        return None
-    m = re.search(r"([0-4](?:\.\d{1,3})?)\s*(?:/\s*4(?:\.0+)?)?\s*(?:uw|unweighted)", raw, re.I)
+        return None, None, False
+    low = raw.lower()
+    uw = w = None
+
+    m = re.search(r"([0-4](?:\.\d{1,3})?)\s*(?:/\s*4(?:\.0+)?)?\s*(?:uw\b|unweighted)", low)
     if m:
-        v = float(m.group(1))
-        return v if 0 < v <= 4.0 else None
-    for tok in re.findall(r"\d+(?:\.\d+)?", raw):
-        v = float(tok)
-        if 0 < v <= 4.0:
-            return round(v, 3)
-    return None
+        uw = float(m.group(1))
+    mw = re.search(r"([0-9](?:\.\d{1,3})?)\s*(?:w\b|weighted)", low)
+    if mw:
+        v = float(mw.group(1))
+        if 0 < v <= 6.0:
+            w = v
+
+    nums = [float(t) for t in re.findall(r"\d+(?:\.\d+)?", raw)]
+    if uw is None:
+        cands = [v for v in nums if 0 < v <= 4.0]
+        if cands:
+            uw = cands[0]
+    if uw is None:
+        pct = [v for v in nums if 60 <= v <= 100]
+        if pct:
+            for lo, g in PCT_TO_GPA:
+                if pct[0] >= lo:
+                    return g, w, True
+            return 0.7, w, True
+    if w is None:
+        over = [v for v in nums if 4.0 < v <= 6.0]
+        if over:
+            w = over[0]
+
+    return (round(uw, 3) if uw else None), (round(w, 3) if w else None), False
 
 
 def parse_sat(text: str) -> int | None:
@@ -669,10 +703,7 @@ def parse_post(post: dict, unmatched: Counter, drops: Counter) -> dict | None:
         drops["body too short / removed"] += 1
         return None
 
-    gpa = parse_gpa(text)
-    if gpa is None:
-        drops["no parseable unweighted GPA"] += 1
-        return None
+    gpa, gpa_w, from_pct = parse_gpa(text)
 
     apps = parse_decisions(text, unmatched)
     if not apps:
@@ -695,6 +726,14 @@ def parse_post(post: dict, unmatched: Counter, drops: Counter) -> dict | None:
             sat = None
 
     unified = sat if sat else (ACT_TO_SAT.get(act) if act else None)
+
+    # A profile needs something to match on. Requiring an unweighted GPA
+    # specifically was throwing away thousands of posts that report only a
+    # weighted GPA or only a test score — both of which the site can use.
+    if gpa is None and unified is None:
+        drops["no GPA and no test score"] += 1
+        return None
+
     residency, residence_raw = parse_residency(text)
 
     created = post.get("created_utc") or 0
@@ -705,6 +744,8 @@ def parse_post(post: dict, unmatched: Counter, drops: Counter) -> dict | None:
         "id": "CR-" + str(post.get("id", "")),      # post id kept; username never stored
         "cycle": cycle,
         "gpa": gpa,
+        "gpa_weighted": gpa_w,
+        "gpa_from_percent": from_pct or None,
         "sat": sat,
         "act": act,
         "unified": unified,
@@ -800,13 +841,15 @@ def write_outputs(profiles, fetched, unmatched, drops, raw_out):
             "profiles": profiles,
         }, f, ensure_ascii=False, indent=1)
 
-    cols = ["id","cycle","gpa","sat","act","unified","ethnicity","gender","residency",
+    cols = ["id","cycle","gpa","gpa_weighted","gpa_from_percent","sat","act","unified","ethnicity","gender","residency",
             "major","income","school_type","hook","ecs","accepted","waitlisted","rejected"]
     with open("profiles.csv", "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f); w.writerow(cols)
         for p in profiles:
             g = lambda r: "; ".join(f"{a['school']} ({a['round']})" for a in p["apps"] if a["result"] == r)
-            w.writerow([p["id"], p["cycle"], p["gpa"], p["sat"] or "", p["act"] or "", p["unified"] or "",
+            w.writerow([p["id"], p["cycle"], p["gpa"] if p["gpa"] is not None else "",
+                        p.get("gpa_weighted") or "", 1 if p.get("gpa_from_percent") else "",
+                        p["sat"] or "", p["act"] or "", p["unified"] or "",
                         p["ethnicity"] or "", p["gender"] or "", p["residency"] or "", p["major"] or "",
                         p["income"] or "", p["school_type"] or "", p["hook"] or "", "; ".join(p["ecs"]),
                         g("accepted"), g("waitlisted"), g("rejected")])
@@ -829,7 +872,7 @@ def write_outputs(profiles, fetched, unmatched, drops, raw_out):
         "",
         "-- field extraction rates --",
         *[f"  {fld:<14} {rate(fld)}" for fld in
-          ("gpa","sat","act","unified","ethnicity","gender","residency","major","income","hook")],
+          ("gpa","gpa_weighted","sat","act","unified","ethnicity","gender","residency","major","income","hook")],
         "",
         "-- outcomes --",
         *[f"  {r:<12} {sum(1 for a in apps if a['result']==r)}" for r in ("accepted","waitlisted","rejected")],

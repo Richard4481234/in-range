@@ -29,8 +29,8 @@ START, END = "/*<<<DATA>>>*/", "/*<<<END>>>*/"
 PSTART, PEND = "/*<<<PEOPLE>>>*/", "/*<<<ENDPEOPLE>>>*/"
 
 # Community profile fields. `apps` is packed as [school, round, result] triples.
-PCOLS = ["gpa", "sat", "act", "unified", "ethnicity", "gender", "residency",
-         "major", "income", "cycle", "ecs", "apps"]
+PCOLS = ["gpa", "gpa_weighted", "gpa_from_percent", "sat", "act", "unified",
+         "ethnicity", "gender", "residency", "major", "income", "cycle", "ecs", "apps"]
 
 
 # ---------------------------------------------------------------------
