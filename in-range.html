@@ -3,7 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>In Range — where you actually stand</title>
+<title>InRange — where your scores actually stand at every US college</title>
+<meta name="description" content="Official admission rates and admitted-student score ranges for 1,715 US colleges, from the Department of Education. Enter an SAT or ACT score and see where you land. No fake chance-me percentages.">
+<meta name="theme-color" content="#0d1117">
+<meta property="og:type" content="website">
+<meta property="og:title" content="InRange — where your scores actually stand">
+<meta property="og:description" content="Real admit rates and score ranges for 1,715 US colleges, straight from federal data — plus what actually happened to 1,782 real applicants.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1117'/%3E%3Crect x='6' y='14' width='20' height='5' rx='2.5' fill='%234c8dff' opacity='.35'/%3E%3Crect x='14.5' y='9' width='3' height='15' rx='1.5' fill='%23e6edf3'/%3E%3C/svg%3E">
 <style>
   :root {
     --bg:#0d1117; --panel:#151b23; --panel-2:#1c232d; --line:#2a3441;
@@ -103,6 +110,11 @@
   .fact .v{font-size:19px;font-weight:700;font-family:var(--mono)}
   .fact .v small{font-size:12px;color:var(--muted);font-weight:400;font-family:inherit}
   .fact .v.na{font-size:14px;color:var(--dim);font-weight:400;font-family:inherit}
+  .fact .v.warn{color:var(--warn)}
+  .fact .v.bad{color:var(--bad)}
+  .gradwarn{margin-top:11px;padding:10px 12px;border-radius:7px;background:var(--bad-soft);
+            border-left:3px solid var(--bad);font-size:12px;color:var(--muted);line-height:1.5}
+  .gradwarn b{color:var(--bad)}
 
   .bandwrap{margin-top:12px}
   .bandlabels{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);font-family:var(--mono);margin-bottom:3px}
@@ -340,6 +352,11 @@
         <input type="number" id="tuitionMax" placeholder="any">
       </div>
       <div class="field">
+        <label class="lbl" for="gradMin">Min graduation rate (%)</label>
+        <input type="number" id="gradMin" placeholder="any" min="0" max="100">
+        <div class="hint">Share of students finishing a degree within six years.</div>
+      </div>
+      <div class="field">
         <label class="lbl"><input type="checkbox" id="onlyScored" style="width:auto;margin-right:6px">Only schools reporting scores</label>
       </div>
       <div class="btnrow"><button class="btn ghost" id="resetBtn">Reset filters</button></div>
@@ -489,7 +506,7 @@ const PER_PAGE = 25;
 const state = {
   test: "sat", score: null, q: "", stateF: "", control: "",
   admMin: null, admMax: null, sizeMin: null, sizeMax: null, tuitionMax: null,
-  onlyScored: false, sort: "selectivity", page: 1
+  gradMin: null, onlyScored: false, sort: "selectivity", page: 1
 };
 
 /* ---------- persistence (best effort; harmless if unavailable) ---------- */
@@ -569,6 +586,7 @@ function apply() {
     if (state.sizeMin !== null && (s.size === null || s.size < state.sizeMin)) return false;
     if (state.sizeMax !== null && (s.size === null || s.size > state.sizeMax)) return false;
     if (state.tuitionMax !== null && (s.tuition_in === null || s.tuition_in > state.tuitionMax)) return false;
+    if (state.gradMin !== null && (s.grad_rate === null || s.grad_rate * 100 < state.gradMin)) return false;
     if (state.onlyScored) { const [lo, hi] = range(s); if (lo === null || hi === null) return false; }
     return true;
   });
@@ -640,7 +658,17 @@ function schoolHtml(s) {
   if (s.size) bits.push(`<b>${s.size.toLocaleString()}</b> undergrads`);
   if (s.tuition_in) bits.push(`in-state <b>${money(s.tuition_in)}</b>`);
   if (s.tuition_out && s.tuition_out !== s.tuition_in) bits.push(`out <b>${money(s.tuition_out)}</b>`);
-  if (s.grad_rate) bits.push(`<b>${Math.round(s.grad_rate * 100)}%</b> grad rate`);
+
+  /* Graduation rate belongs next to the admit rate, not buried in small print.
+     Getting in is not the outcome that matters; finishing is. Some schools in
+     this data graduate fewer than a quarter of the students they admit. */
+  const g = s.grad_rate;
+  const gradCls = g === null ? "na" : g < 0.33 ? "bad" : g < 0.50 ? "warn" : "";
+  const gradNote = g !== null && g < 0.40
+    ? `<div class="gradwarn"><b>Only ${Math.round(g * 100)}% of students here finish a degree
+       within six years.</b> Being admitted is the easy part at a school like this — check
+       outcomes and cost carefully before applying.</div>`
+    : "";
 
   return `<div class="school">
     <div class="shead">
@@ -655,7 +683,10 @@ function schoolHtml(s) {
         <div class="v ${s.admit_rate === null ? "na" : ""}">${s.admit_rate === null ? "not reported" : pct(s.admit_rate)}</div></div>
       <div class="fact"><div class="k">${state.test.toUpperCase()} middle 50%</div>
         <div class="v ${range(s)[0] === null ? "na" : ""}">${range(s)[0] === null ? "not reported" : range(s)[0] + "–" + range(s)[1]}</div></div>
+      <div class="fact"><div class="k">Graduate in 6 yrs</div>
+        <div class="v ${gradCls || (g === null ? "na" : "")}">${g === null ? "not reported" : Math.round(g * 100) + "%"}</div></div>
     </div>
+    ${gradNote}
     ${bandHtml(s)}
     <div class="srow2">
       <div class="meta">${bits.join(" · ") || "&nbsp;"}</div>
@@ -759,15 +790,15 @@ $("q").addEventListener("input", e => { state.q = e.target.value.trim(); state.p
 [["fState", "stateF"], ["fControl", "control"]].forEach(([id, k]) =>
   $(id).addEventListener("change", e => { state[k] = e.target.value; state.page = 1; render(); }));
 [["admMin", "admMin"], ["admMax", "admMax"], ["sizeMin", "sizeMin"],
- ["sizeMax", "sizeMax"], ["tuitionMax", "tuitionMax"]].forEach(([id, k]) =>
+ ["sizeMax", "sizeMax"], ["tuitionMax", "tuitionMax"], ["gradMin", "gradMin"]].forEach(([id, k]) =>
   $(id).addEventListener("input", e => { state[k] = num(e.target.value); state.page = 1; render(); }));
 $("onlyScored").addEventListener("change", e => { state.onlyScored = e.target.checked; state.page = 1; render(); });
 $("sort").addEventListener("change", e => { state.sort = e.target.value; state.page = 1; render(); });
 
 $("resetBtn").addEventListener("click", () => {
   Object.assign(state, { q: "", stateF: "", control: "", admMin: null, admMax: null,
-    sizeMin: null, sizeMax: null, tuitionMax: null, onlyScored: false, page: 1 });
-  ["q", "fState", "fControl", "admMin", "admMax", "sizeMin", "sizeMax", "tuitionMax"]
+    sizeMin: null, sizeMax: null, tuitionMax: null, gradMin: null, onlyScored: false, page: 1 });
+  ["q", "fState", "fControl", "admMin", "admMax", "sizeMin", "sizeMax", "tuitionMax", "gradMin"]
     .forEach(id => $(id).value = "");
   $("onlyScored").checked = false;
   render();
