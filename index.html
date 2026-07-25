@@ -297,7 +297,7 @@
         </div>
       </div>
       <div class="field">
-        <input type="number" id="score" placeholder="1400">
+        <input type="number" id="score" placeholder="1400" aria-label="Your test score">
         <div class="hint" id="scoreHint">Leave blank to browse without comparing.</div>
       </div>
     </div>
@@ -324,15 +324,15 @@
       <div class="field">
         <label class="lbl">Admit rate</label>
         <div class="duo">
-          <input type="number" id="admMin" placeholder="min %" min="0" max="100">
-          <input type="number" id="admMax" placeholder="max %" min="0" max="100">
+          <input type="number" id="admMin" placeholder="min %" min="0" max="100" aria-label="Minimum admit rate, percent">
+          <input type="number" id="admMax" placeholder="max %" min="0" max="100" aria-label="Maximum admit rate, percent">
         </div>
       </div>
       <div class="field">
         <label class="lbl">Undergrad size</label>
         <div class="duo">
-          <input type="number" id="sizeMin" placeholder="min">
-          <input type="number" id="sizeMax" placeholder="max">
+          <input type="number" id="sizeMin" placeholder="min" aria-label="Minimum undergraduate enrolment">
+          <input type="number" id="sizeMax" placeholder="max" aria-label="Maximum undergraduate enrolment">
         </div>
       </div>
       <div class="field">
@@ -410,6 +410,8 @@
         <p>What this <em>is</em> good for: seeing that people with nearly identical numbers ended up in
         very different places. No official dataset shows you that.</p>
       </div>
+
+      <div class="srcline" id="peopleSrc" style="margin-bottom:16px"></div>
 
       <div class="counts" id="peopleCounts"></div>
 
@@ -984,8 +986,32 @@ function personHtml(p) {
   </div>`;
 }
 
+/* Say plainly where these profiles came from and which years they cover.
+   A section that asks to be read as anecdote has to show its own provenance. */
+function renderPeopleSource() {
+  const meta = (PEOPLE_PACKED && PEOPLE_PACKED.meta) || {};
+  const years = PEOPLE.map(p => p.cycle).filter(Boolean);
+  const span = years.length
+    ? (Math.min(...years) === Math.max(...years)
+        ? `${Math.min(...years)}`
+        : `${Math.min(...years)}–${Math.max(...years)}`)
+    : null;
+  const gathered = meta.generated_utc ? meta.generated_utc.slice(0, 10) : null;
+  const complete = PEOPLE.filter(isComplete).length;
+  $("peopleSrc").innerHTML =
+    `<span class="tag none">Community data</span><br>
+     <b>${PEOPLE.length.toLocaleString()}</b> posts from
+     <b>${meta.source ? meta.source.replace(/ via .*/, "") : "r/collegeresults"}</b>${
+       span ? `, application cycles <b>${span}</b>` : ""}${
+       gathered ? `, gathered ${gathered}` : ""}.
+     <br><span style="font-size:11.5px">Usernames removed.
+     ${complete.toLocaleString()} of ${PEOPLE.length.toLocaleString()} listed at least one rejection or
+     waitlist; the rest are flagged below as incomplete.</span>`;
+}
+
 function renderPeople() {
   if (!PEOPLE.length) return;
+  renderPeopleSource();
   const { rows, excluded } = peopleFiltered();
   const pages = Math.max(1, Math.ceil(rows.length / P_PER_PAGE));
   if (pState.page > pages) pState.page = pages;
