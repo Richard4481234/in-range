@@ -164,6 +164,17 @@
           border-radius:7px;padding:11px 13px;font-size:12.5px;color:var(--muted);
           margin-bottom:14px;line-height:1.55}
   .lesson b{color:var(--warn)}
+  .startpanel{background:var(--accent-soft);border:1px solid var(--accent);border-radius:9px;
+              padding:16px 18px;margin-bottom:16px}
+  .startpanel h3{margin:0 0 10px;font-size:16.5px;color:var(--text);font-weight:650;line-height:1.4}
+  .startpanel p{margin:0 0 9px;font-size:13.5px;color:var(--muted);line-height:1.6}
+  .startpanel p b{color:var(--text)}
+  .startlinks{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .startlinks button{background:var(--panel);border:1px solid var(--line);color:var(--muted);
+                     border-radius:7px;padding:7px 12px;font-size:12.5px;cursor:pointer;font-family:inherit}
+  .startlinks button:hover{color:var(--text);border-color:var(--accent)}
+  button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px}
   table.cmp{width:100%;border-collapse:collapse;font-size:13px;min-width:660px}
   table.cmp th{text-align:left;color:var(--dim);font-size:10.5px;text-transform:uppercase;
                letter-spacing:.6px;padding:7px 9px;border-bottom:1px solid var(--line);font-weight:700}
@@ -333,6 +344,52 @@
         <li>Schools that report no admit rate get no label. Blank is more honest than a guess.</li>
       </ul>
 
+      <h4>Cost is the all-in figure, not tuition</h4>
+      <p>
+        Tuition excludes housing, food, books and fees. Across these schools the gap is a median
+        of about <b>$14,500 a year</b> — UCLA's tuition reads $15,203 while the real annual cost is
+        $38,614. Leading with tuition tells students a school is affordable when it isn't, so cards
+        show the total and the filter works on it.
+      </p>
+
+      <h4>Graduation rate sits next to the admission rate</h4>
+      <p>
+        The share of students finishing a degree within six years. Seventy schools in this data
+        graduate under a quarter of theirs, and anything below 40% carries a warning. Being
+        admitted is not the outcome that matters; finishing is.
+      </p>
+
+      <h4>How "similar schools" works</h4>
+      <p>
+        Distance is computed from admission rate, graduation rate, cost, size (on a log scale, so
+        5,000 students reads as closer to 8,000 than to 45,000) and whether the school is public or
+        private. <b>Rankings and prestige play no part</b> — this data has no basis for asserting
+        either. A missing value costs a small penalty rather than disqualifying a school, so
+        institutions that don't report scores still appear.
+      </p>
+
+      <h4>Why the list isn't ranked by default</h4>
+      <p>
+        With nothing entered it's alphabetical. Sorted by selectivity it would open with the same
+        handful of famous names everyone already worries about, which asserts that exclusivity is
+        the axis that matters. Across all these schools the median admission rate is around 77%.
+        Enter a score and the order switches to fit; choose a sort yourself and that choice sticks.
+      </p>
+
+      <h4>The community section</h4>
+      <p>
+        The second tab holds posts from r/collegeresults, covering the 2024–2026 cycles, with
+        usernames removed. It reports <b>counts and individual cases only — never a rate</b>,
+        because people who got good news post far more often than people who didn't. Filter to one
+        school and the site shows that sample's admitted share beside the real admission rate, so
+        you can see the size of the distortion for yourself.
+      </p>
+      <p>
+        Income is bucketed rather than shown as the free text people wrote. Profiles listing
+        acceptances but no rejections are flagged as incomplete — usually short posts or
+        early-decision commitments, not applicants who got in everywhere.
+      </p>
+
       <h4>What's missing</h4>
       <ul>
         <li><b>GPA.</b> The federal data doesn't collect it, so this tool doesn't ask for it. Anyone showing
@@ -454,18 +511,20 @@
         range you'll see. These are institution-wide figures and don't reflect your major, your state, or
         anything an admissions officer reads in your file.
       </div>
+      <div id="startPanel"></div>
       <div id="similarBanner"></div>
       <div class="resbar">
         <div class="left" id="resCount"></div>
         <div style="display:flex;gap:8px;align-items:center">
           <label class="lbl" for="sort" style="margin:0">Sort</label>
           <select id="sort">
+            <option value="name">Name (A–Z)</option>
+            <option value="fit">Best fit for my score</option>
+            <option value="cost">Cheapest all-in</option>
+            <option value="grad">Highest graduation rate</option>
+            <option value="size">Largest</option>
             <option value="selectivity">Most selective first</option>
             <option value="least">Least selective first</option>
-            <option value="fit">Best fit for my score</option>
-            <option value="name">Name (A–Z)</option>
-            <option value="size">Largest</option>
-            <option value="cost">Cheapest all-in</option>
           </select>
         </div>
       </div>
@@ -580,8 +639,11 @@ const PER_PAGE = 25;
 const state = {
   test: "sat", score: null, q: "", stateF: "", control: "",
   admMin: null, admMax: null, sizeMin: null, sizeMax: null, costMax: null,
-  gradMin: null, onlyScored: false, sort: "selectivity", page: 1, similarTo: null
+  gradMin: null, onlyScored: false, sort: "name", page: 1, similarTo: null
 };
+/* Whether the reader has chosen a sort themselves. Until they do, entering a
+   score switches to fit — but a deliberate choice is never overridden. */
+let sortTouched = false;
 
 /* "Schools like this one".
    Most students can name a couple of dozen colleges; this file knows 1,715.
@@ -712,6 +774,7 @@ function apply() {
     case "least": out.sort((a, b) => neg(b.admit_rate) - neg(a.admit_rate) || a.name.localeCompare(b.name)); break;
     case "fit":   out.sort((a, b) => fit(a) - fit(b) || inf(a.admit_rate) - inf(b.admit_rate)); break;
     case "name":  out.sort((a, b) => a.name.localeCompare(b.name)); break;
+    case "grad":  out.sort((a, b) => neg(b.grad_rate) - neg(a.grad_rate) || a.name.localeCompare(b.name)); break;
     case "size":  out.sort((a, b) => (b.size || 0) - (a.size || 0)); break;
     case "cost":  out.sort((a, b) => inf(a.cost) - inf(b.cost)); break;
     default:      out.sort((a, b) => inf(a.admit_rate) - inf(b.admit_rate) || a.name.localeCompare(b.name));
@@ -819,6 +882,40 @@ function schoolHtml(s) {
   </div>`;
 }
 
+/* What a first-time visitor meets.
+
+   This used to open with the list sorted most-selective-first, so the first
+   thing anyone saw was Caltech, Stanford, Harvard, Yale. That ordering asserts
+   that exclusivity is the axis that matters — the exact framing this tool
+   exists to argue against. With nothing entered there is no honest basis for
+   ranking 1,715 colleges, so it now leads with context instead. */
+function renderStartPanel() {
+  const untouched = state.score === null && !state.q && !state.stateF && !state.control &&
+    state.admMin === null && state.admMax === null && state.sizeMin === null &&
+    state.sizeMax === null && state.costMax === null && state.gradMin === null &&
+    !state.onlyScored && state.similarTo === null;
+  if (!untouched || !SCHOOLS.length) { $("startPanel").innerHTML = ""; return; }
+
+  const withRate = SCHOOLS.filter(s => s.admit_rate !== null).map(s => s.admit_rate).sort((a, b) => a - b);
+  const median = Math.round(100 * withRate[Math.floor(withRate.length / 2)]);
+  const under20 = withRate.filter(r => r < 0.20).length;
+
+  $("startPanel").innerHTML = `<div class="startpanel">
+    <h3>${SCHOOLS.length.toLocaleString()} four-year colleges. Enter a score on the left to see where you stand.</h3>
+    <p>Before you do, two numbers worth holding on to. Across every one of these schools the
+       <b>median admission rate is ${median}%</b> — most colleges admit most of the people who
+       apply. Only <b>${under20}</b> of them admit fewer than one in five.</p>
+    <p>The list below is in alphabetical order on purpose. Sorted by selectivity it would open
+       with the same handful of famous names everyone already worries about, and this tool has
+       no business telling you those are the ones that matter.</p>
+    <div class="startlinks">
+      <button data-start="fit">Sort by fit once I enter a score</button>
+      <button data-start="cost">Show me the most affordable</button>
+      <button data-start="grad">Show me where students actually graduate</button>
+    </div>
+  </div>`;
+}
+
 function render() {
   if (!SCHOOLS.length) {
     $("results").innerHTML = `<div class="empty">
@@ -828,6 +925,7 @@ function render() {
     $("resCount").textContent = ""; $("pager").innerHTML = "";
     renderList(); return;
   }
+  renderStartPanel();
   const seed = state.similarTo !== null ? findSchool(state.similarTo) : null;
   $("similarBanner").innerHTML = seed
     ? `<div class="schoolfilter">
@@ -957,8 +1055,19 @@ $("testType").addEventListener("click", e => {
   state.page = 1; render();
 });
 $("score").addEventListener("input", e => {
-  state.score = num(e.target.value); state.page = 1; render();
+  state.score = num(e.target.value); state.page = 1;
+  // once there is a score, fit is the useful order — unless a sort was chosen
+  if (state.score !== null && !sortTouched && state.sort === "name") {
+    state.sort = "fit"; $("sort").value = "fit";
+  }
+  render();
   if (PEOPLE.length) { pState.page = 1; renderPeople(); }
+});
+$("startPanel").addEventListener("click", e => {
+  const b = e.target.closest("[data-start]"); if (!b) return;
+  const v = b.dataset.start;
+  if (v === "fit") { $("score").focus(); return; }
+  state.sort = v; sortTouched = true; $("sort").value = v; state.page = 1; render();
 });
 $("q").addEventListener("input", e => { state.q = e.target.value.trim(); state.page = 1; render(); });
 [["fState", "stateF"], ["fControl", "control"]].forEach(([id, k]) =>
@@ -967,7 +1076,9 @@ $("q").addEventListener("input", e => { state.q = e.target.value.trim(); state.p
  ["sizeMax", "sizeMax"], ["costMax", "costMax"], ["gradMin", "gradMin"]].forEach(([id, k]) =>
   $(id).addEventListener("input", e => { state[k] = num(e.target.value); state.page = 1; render(); }));
 $("onlyScored").addEventListener("change", e => { state.onlyScored = e.target.checked; state.page = 1; render(); });
-$("sort").addEventListener("change", e => { state.sort = e.target.value; state.page = 1; render(); });
+$("sort").addEventListener("change", e => {
+  state.sort = e.target.value; sortTouched = true; state.page = 1; render();
+});
 
 $("resetBtn").addEventListener("click", () => {
   Object.assign(state, { q: "", stateF: "", control: "", admMin: null, admMax: null,

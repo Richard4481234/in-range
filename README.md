@@ -6,54 +6,66 @@ Two questions, two datasets, deliberately never mixed.
 
 | Tab | Question | Source |
 |---|---|---|
-| **Colleges** | What is the real admit rate here, and where do my scores sit? | U.S. Department of Education |
+| **Colleges** | What is the real admit rate, what will it cost, and where do my scores sit? | U.S. Department of Education |
 | **Real applicants** | What actually happened to people with numbers like mine? | r/collegeresults posts |
 
-The first gives you numbers you can trust. The second gives you the thing no
-official dataset contains: individual stories showing that people with nearly
-identical stats ended up in wildly different places.
+The first gives numbers you can trust. The second gives the thing no official
+dataset contains: individual stories showing that people with nearly identical
+stats ended up in wildly different places.
 
 ---
 
 ## Colleges — 1,715 four-year institutions
 
-Data from the [College Scorecard](https://collegescorecard.ed.gov/data/), which
-publishes figures colleges report themselves through IPEDS, the federal system
-every accredited institution must use. It covers essentially all of them, so
-there is no sampling and no volunteer bias. Currently built from the
-**10 June 2026** release.
+From the [College Scorecard](https://collegescorecard.ed.gov/data/), which
+publishes figures colleges report themselves through IPEDS. It covers
+essentially all of them, so there is no sampling and no volunteer bias.
+Currently built from the **10 June 2026** release.
 
-Enter an SAT or ACT score and each school shows its admit rate alongside the
-25th–75th percentile range of admitted students, with a marker for where you land.
+Each school shows:
+
+- **Admission rate** — the real one
+- **Score range** — 25th–75th percentile of admitted students, with a marker for where you land
+- **Graduation rate** — share finishing within six years, shown next to the admit rate rather than in small print
+- **Cost** — the all-in annual figure: tuition *plus* housing, food, books and fees
+
+**Similar schools** — one click surfaces the twelve most comparable institutions,
+scored on selectivity, size, cost, graduation rate and public/private. No
+rankings are involved; this data has no business asserting prestige.
+
+**Compare** — put a shortlist side by side, best value in each column highlighted.
 
 ### What it deliberately does not do
 
-**There is no "chance me" percentage.** A tool that multiplies your score by an
-admit rate and returns "you have a 23% chance" is inventing that number.
-Admissions offices read essays, recommendations, course rigor, context, and their
-own institutional needs — none of which appear in this data or any public dataset.
+**No "chance me" percentage.** A tool that multiplies your score by an admit
+rate and returns "you have a 23% chance" is inventing that number. Admissions
+offices read essays, recommendations, course rigor, context, and their own
+institutional needs — none of which appear in any public dataset. The site shows
+two separate facts and refuses to blend them.
 
-So the site shows two separate facts and refuses to blend them: how selective the
-school is, and where your score sits among admitted students.
+**No default ranking.** With nothing entered, the list is alphabetical. Sorted
+by selectivity it would open with the same handful of famous names everyone
+already worries about. Across all 1,715 schools the median admission rate is
+**77%**, and only **78** admit fewer than one in five.
 
 **A score range is not a cutoff.** A quarter of admitted students scored below
 the bottom of every range shown.
 
-**Any school admitting under 20% is labelled "Reach for everyone"**, regardless
-of score. At those schools most rejected applicants are academically qualified,
-so a strong score buys far less than it appears to.
+**Any school admitting under 20% is a reach for everyone**, regardless of score.
+
+**Low graduation rates are called out.** Seventy schools here graduate under a
+quarter of their students. Getting in is not the outcome that matters.
 
 ### What's missing, and why
 
 | Missing | Reason |
 |---|---|
-| **GPA** | The federal data doesn't collect it. Anyone showing you a GPA cutoff got it from a survey or made it up. |
-| **Major-level admissions** | Engineering and nursing are often far harder than the university-wide number. |
+| **GPA** | Federal data doesn't collect it. Anyone showing you a GPA cutoff got it from a survey or made it up. |
+| **Major-level admissions** | Engineering and nursing are often far harder than the university-wide figure. |
 | **In-state vs. out-of-state rates** | At public universities the gap is often enormous. Only the combined rate is published. |
 | **Early vs. regular decision** | Not reported at this level. |
 
-Test-optional schools' ranges describe only students who submitted scores, which
-skews them upward.
+Test-optional schools' ranges describe only students who submitted scores.
 
 ---
 
@@ -61,21 +73,23 @@ skews them upward.
 
 Harvested from **r/collegeresults** via the
 [Arctic Shift](https://github.com/ArthurHeitmann/arctic_shift) archive, covering
-the 2024–2026 application cycles. Usernames are never stored.
+the 2024–2026 cycles. Usernames are never stored.
 
-**This section contains no admit rates, anywhere, on purpose.** People who got
-good news post about it far more often than people who didn't, so any percentage
-computed from these profiles would be wrong in a predictable direction. For
-scale: the most-selective tier computes to a 20% admit rate in this data against
-a real figure near 4%. That gap *is* the bias, and no amount of parsing removes it.
+Search across activities, intended major, background and hooks — *research*,
+*debate*, *first-gen*, *QuestBridge*. Filter to a single school and split by
+outcome to compare admits against rejects. Income is bucketed rather than shown
+as the free text people wrote.
 
-What you get instead are counts and individual cases you can filter by how close
-someone's stats are to yours.
+**This section contains no admit rates anywhere, on purpose.** People who got
+good news post far more often than people who didn't. For scale: the
+most-selective tier computes to a 20% admit rate here against a real figure near
+4%. When you filter to one school the site shows you that gap directly — same
+school, both numbers, side by side — because it's the clearest demonstration of
+why these profiles can't estimate anyone's odds.
 
-Roughly 15% of posts list acceptances but no rejections — short "I got in!" posts
-and early-decision commitments, averaging under three schools each. These are
-flagged in the interface and can be hidden, so nobody reads them as applicants
-who got in everywhere.
+Roughly 15% of posts list acceptances but no rejections — short "I got in!"
+posts and early-decision commitments, averaging under three schools each. They
+are flagged and can be hidden.
 
 ---
 
@@ -110,16 +124,16 @@ python harvest_collegeresults.py --diagnose
 ```
 
 Separates genuine parser faults from properties of the sample that no parser can
-fix. `get_college_data.py --self-test` and `harvest_collegeresults.py --self-test`
-exercise both parsers offline against fixtures.
+fix. Both scripts have a `--self-test` that runs offline against fixtures.
 
 ---
 
 ## Notes
 
-One HTML file. No network requests, no cookies, nothing sent anywhere. Your
-score and saved list stay in your browser.
+One HTML file, ~290 KB over the wire. No network requests, no cookies, nothing
+sent anywhere. Your score and saved list stay in your browser. Every view is
+linkable — filters, score and tab all live in the URL.
 
-The Scorecard data is a work of the U.S. federal government and is in the public
-domain. Arctic Shift honours data removal requests; anyone redistributing work
-built on it should do the same.
+Scorecard data is a work of the U.S. federal government and is in the public
+domain. Arctic Shift honours removal requests; anyone redistributing work built
+on it should do the same.
