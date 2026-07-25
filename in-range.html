@@ -391,8 +391,10 @@
         </div>
       </div>
       <div class="field">
-        <label class="lbl" for="tuitionMax">Max in-state tuition ($)</label>
-        <input type="number" id="tuitionMax" placeholder="any">
+        <label class="lbl" for="costMax">Max total cost per year ($)</label>
+        <input type="number" id="costMax" placeholder="any">
+        <div class="hint">Tuition <em>plus</em> housing, food, books and fees — the figure
+          that actually leaves your pocket. Typically ~$14,000 above tuition alone.</div>
       </div>
       <div class="field">
         <label class="lbl" for="gradMin">Min graduation rate (%)</label>
@@ -455,7 +457,7 @@
             <option value="fit">Best fit for my score</option>
             <option value="name">Name (A–Z)</option>
             <option value="size">Largest</option>
-            <option value="cost">Cheapest (in-state)</option>
+            <option value="cost">Cheapest all-in</option>
           </select>
         </div>
       </div>
@@ -553,7 +555,7 @@ const PER_PAGE = 25;
 
 const state = {
   test: "sat", score: null, q: "", stateF: "", control: "",
-  admMin: null, admMax: null, sizeMin: null, sizeMax: null, tuitionMax: null,
+  admMin: null, admMax: null, sizeMin: null, sizeMax: null, costMax: null,
   gradMin: null, onlyScored: false, sort: "selectivity", page: 1
 };
 
@@ -633,7 +635,7 @@ function apply() {
     if (state.admMax !== null && (s.admit_rate === null || s.admit_rate * 100 > state.admMax)) return false;
     if (state.sizeMin !== null && (s.size === null || s.size < state.sizeMin)) return false;
     if (state.sizeMax !== null && (s.size === null || s.size > state.sizeMax)) return false;
-    if (state.tuitionMax !== null && (s.tuition_in === null || s.tuition_in > state.tuitionMax)) return false;
+    if (state.costMax !== null && (!s.cost || s.cost > state.costMax)) return false;
     if (state.gradMin !== null && (s.grad_rate === null || s.grad_rate * 100 < state.gradMin)) return false;
     if (state.onlyScored) { const [lo, hi] = range(s); if (lo === null || hi === null) return false; }
     return true;
@@ -654,7 +656,7 @@ function apply() {
     case "fit":   out.sort((a, b) => fit(a) - fit(b) || inf(a.admit_rate) - inf(b.admit_rate)); break;
     case "name":  out.sort((a, b) => a.name.localeCompare(b.name)); break;
     case "size":  out.sort((a, b) => (b.size || 0) - (a.size || 0)); break;
-    case "cost":  out.sort((a, b) => inf(a.tuition_in) - inf(b.tuition_in)); break;
+    case "cost":  out.sort((a, b) => inf(a.cost) - inf(b.cost)); break;
     default:      out.sort((a, b) => inf(a.admit_rate) - inf(b.admit_rate) || a.name.localeCompare(b.name));
   }
   return out;
@@ -711,10 +713,14 @@ function schoolHtml(s) {
   const chip = cls ? `<span class="chip ${CHIP[cls][1]}">${CHIP[cls][0]}</span>`
                    : `<span class="chip c-none">no admit rate reported</span>`;
   const inList = myList.some(x => sameId(x.id, s.id));
+  /* Cost of attendance, not tuition. Tuition excludes housing, food, books and
+     fees — across this dataset the gap is a median of about $14,500 a year, so
+     leading with tuition tells students a school is affordable when it isn't. */
   const bits = [];
+  if (s.cost) bits.push(`<b>${money(s.cost)}/yr</b> all-in`);
+  if (s.tuition_in) bits.push(`tuition ${money(s.tuition_in)}${
+    s.tuition_out && s.tuition_out !== s.tuition_in ? ` · out-of-state ${money(s.tuition_out)}` : ""}`);
   if (s.size) bits.push(`<b>${s.size.toLocaleString()}</b> undergrads`);
-  if (s.tuition_in) bits.push(`in-state <b>${money(s.tuition_in)}</b>`);
-  if (s.tuition_out && s.tuition_out !== s.tuition_in) bits.push(`out <b>${money(s.tuition_out)}</b>`);
 
   /* Graduation rate belongs next to the admit rate, not buried in small print.
      Getting in is not the outcome that matters; finishing is. Some schools in
@@ -851,15 +857,15 @@ $("q").addEventListener("input", e => { state.q = e.target.value.trim(); state.p
 [["fState", "stateF"], ["fControl", "control"]].forEach(([id, k]) =>
   $(id).addEventListener("change", e => { state[k] = e.target.value; state.page = 1; render(); }));
 [["admMin", "admMin"], ["admMax", "admMax"], ["sizeMin", "sizeMin"],
- ["sizeMax", "sizeMax"], ["tuitionMax", "tuitionMax"], ["gradMin", "gradMin"]].forEach(([id, k]) =>
+ ["sizeMax", "sizeMax"], ["costMax", "costMax"], ["gradMin", "gradMin"]].forEach(([id, k]) =>
   $(id).addEventListener("input", e => { state[k] = num(e.target.value); state.page = 1; render(); }));
 $("onlyScored").addEventListener("change", e => { state.onlyScored = e.target.checked; state.page = 1; render(); });
 $("sort").addEventListener("change", e => { state.sort = e.target.value; state.page = 1; render(); });
 
 $("resetBtn").addEventListener("click", () => {
   Object.assign(state, { q: "", stateF: "", control: "", admMin: null, admMax: null,
-    sizeMin: null, sizeMax: null, tuitionMax: null, gradMin: null, onlyScored: false, page: 1 });
-  ["q", "fState", "fControl", "admMin", "admMax", "sizeMin", "sizeMax", "tuitionMax", "gradMin"]
+    sizeMin: null, sizeMax: null, costMax: null, gradMin: null, onlyScored: false, page: 1 });
+  ["q", "fState", "fControl", "admMin", "admMax", "sizeMin", "sizeMax", "costMax", "gradMin"]
     .forEach(id => $(id).value = "");
   $("onlyScored").checked = false;
   render();
@@ -1270,7 +1276,7 @@ function writeUrl() {
   if (state.stateF) q.set("st", state.stateF);
   if (state.control) q.set("type", state.control);
   [["admMin","amin"],["admMax","amax"],["sizeMin","smin"],["sizeMax","smax"],
-   ["tuitionMax","tmax"],["gradMin","gmin"]].forEach(([k, p]) => {
+   ["costMax","cmax"],["gradMin","gmin"]].forEach(([k, p]) => {
     if (state[k] !== null) q.set(p, state[k]);
   });
   if (state.onlyScored) q.set("scored", "1");
@@ -1295,7 +1301,7 @@ function readUrl() {
   state.control = q.get("type") || "";
   state.admMin = n("amin"); state.admMax = n("amax");
   state.sizeMin = n("smin"); state.sizeMax = n("smax");
-  state.tuitionMax = n("tmax"); state.gradMin = n("gmin");
+  state.costMax = n("cmax"); state.gradMin = n("gmin");
   state.onlyScored = q.get("scored") === "1";
   if (q.get("sort")) state.sort = q.get("sort");
   pState.school = q.get("school") || "";
@@ -1313,7 +1319,7 @@ function syncControls() {
   $("fControl").value = state.control;
   $("admMin").value = state.admMin ?? ""; $("admMax").value = state.admMax ?? "";
   $("sizeMin").value = state.sizeMin ?? ""; $("sizeMax").value = state.sizeMax ?? "";
-  $("tuitionMax").value = state.tuitionMax ?? ""; $("gradMin").value = state.gradMin ?? "";
+  $("costMax").value = state.costMax ?? ""; $("gradMin").value = state.gradMin ?? "";
   $("onlyScored").checked = state.onlyScored;
   $("sort").value = state.sort;
   $("pBand").value = pState.band;

@@ -23,7 +23,7 @@ import sys
 
 COLS = ["id", "name", "city", "state", "control", "admit_rate",
         "sat25", "sat75", "act25", "act75", "size",
-        "tuition_in", "tuition_out", "grad_rate"]
+        "tuition_in", "tuition_out", "cost", "grad_rate"]
 
 START, END = "/*<<<DATA>>>*/", "/*<<<END>>>*/"
 PSTART, PEND = "/*<<<PEOPLE>>>*/", "/*<<<ENDPEOPLE>>>*/"
@@ -114,6 +114,39 @@ def link_schools(colleges: list[dict], people_rows: list[list], apps_ix: int) ->
     return out, len(out), len(unlinked)
 
 
+def norm_income(raw) -> str | None:
+    """Free-text income into a coarse bracket.
+
+    Posters write anything from "$400k+" to a paragraph about their guardians'
+    finances. Publishing that verbatim is both unreadable and more personal
+    detail than anyone needs. Anything that can't be bucketed confidently is
+    dropped rather than shown raw.
+    """
+    if not raw:
+        return None
+    low = str(raw).lower().strip()
+    if re.search(r"full[\s-]?pay|no (?:financial )?aid|didn'?t apply for aid", low):
+        return "Full pay"
+    if re.search(r"\bpell\b|free (?:or reduced )?lunch|low[\s-]?income|fafsa", low):
+        return "Under $50k"
+
+    m = re.search(r"\$?\s*(\d{1,3}(?:,\d{3})+|\d{1,7})\s*(k\b)?", low)
+    if not m:
+        return None
+    v = float(m.group(1).replace(",", ""))
+    if m.group(2) or v < 1000:          # "70k", or a bare "70" meaning thousands
+        v *= 1000
+    if v < 1000 or v > 5_000_000:
+        return None
+    if v < 50_000:
+        return "Under $50k"
+    if v < 100_000:
+        return "$50–100k"
+    if v < 200_000:
+        return "$100–200k"
+    return "$200k+"
+
+
 def pack_people(path: str) -> dict:
     """Pack r/collegeresults profiles. Kept entirely separate from the official
     data — the site never mixes the two or derives rates from these."""
@@ -135,6 +168,8 @@ def pack_people(path: str) -> dict:
                 row.append(apps)
             elif c == "ecs":
                 row.append([str(e)[:120] for e in (p.get("ecs") or [])][:5])
+            elif c == "income":
+                row.append(norm_income(p.get("income")))
             else:
                 v = p.get(c)
                 row.append(round(v, 3) if isinstance(v, float) else v)
