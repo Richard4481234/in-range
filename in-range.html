@@ -154,6 +154,51 @@
   .caveat{background:var(--warn-soft);border:1px solid var(--line);border-left:3px solid var(--warn);
           border-radius:7px;padding:11px 13px;font-size:12.5px;color:var(--muted);margin-bottom:15px}
   .caveat b{color:var(--warn)}
+
+  /* ---- view switcher + community section ---- */
+  .views{display:flex;gap:0;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:16px}
+  .views button{flex:1;background:var(--panel);border:0;border-right:1px solid var(--line);color:var(--muted);
+                padding:11px 14px;font-size:13.5px;cursor:pointer;font-family:inherit;text-align:left;line-height:1.35}
+  .views button:last-child{border-right:0}
+  .views button b{display:block;color:var(--text);font-size:14px;font-weight:650}
+  .views button small{font-size:11.5px;color:var(--dim)}
+  .views button[aria-pressed=true]{background:var(--accent-soft);box-shadow:inset 0 -3px 0 var(--accent)}
+  .views button[aria-pressed=true] b{color:var(--accent)}
+  @media(max-width:640px){.views{flex-direction:column}.views button{border-right:0;border-bottom:1px solid var(--line)}}
+
+  .anec{border:1px solid var(--line);border-left:3px solid var(--dim);border-radius:8px;
+        padding:14px 15px;margin-bottom:11px;background:var(--panel)}
+  .ahead{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+  .astats{font-size:14.5px}
+  .astats b{font-weight:650}
+  .asep{color:var(--line);margin:0 7px}
+  .aid{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+  .ameta{color:var(--muted);font-size:12.5px;margin:5px 0 9px}
+  .aecs{margin-bottom:10px}
+  .aecs .ec{display:inline-block;background:var(--panel-2);border:1px solid var(--line);border-radius:20px;
+            padding:2px 10px;margin:0 5px 5px 0;font-size:11px;color:var(--muted)}
+  .orow{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:start;font-size:12.5px;margin-bottom:6px}
+  .olabel{font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;
+          padding:3px 7px;border-radius:5px;text-align:center}
+  .o-acc{color:var(--good);background:var(--good-soft)}
+  .o-wl{color:var(--warn);background:var(--warn-soft)}
+  .o-rej{color:var(--bad);background:var(--bad-soft)}
+  .olist{color:var(--text)}
+  .olist .rnd{color:var(--dim);font-size:11px}
+  .olist.none{color:var(--dim);font-style:italic}
+  @media(max-width:520px){.orow{grid-template-columns:1fr}.olabel{justify-self:start}}
+
+  .anec.partial{border-left-color:var(--warn);opacity:.92}
+  .partialnote{margin-top:10px;padding:8px 11px;border-radius:6px;background:var(--warn-soft);
+               font-size:11.5px;color:var(--muted);line-height:1.5}
+  .partialnote b{color:var(--warn)}
+  .bigwarn{background:var(--bad-soft);border:1px solid var(--line);border-left:3px solid var(--bad);
+           border-radius:8px;padding:13px 15px;font-size:13px;color:var(--muted);margin-bottom:16px}
+  .bigwarn b{color:var(--bad)}
+  .bigwarn p{margin:8px 0 0}
+  .counts{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px}
+  .counts .c .n{font-size:22px;font-weight:700;font-family:var(--mono)}
+  .counts .c .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);font-weight:700}
   footer{margin-top:36px;padding-top:18px;border-top:1px solid var(--line);color:var(--dim);font-size:12.5px}
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);
          background:var(--accent);color:#fff;padding:10px 18px;border-radius:8px;font-size:13.5px;
@@ -321,7 +366,16 @@
   </aside>
 
   <main>
-    <div class="card">
+    <div class="views" id="views" style="display:none">
+      <button type="button" data-v="colleges" aria-pressed="true">
+        <b>Colleges</b><small>Official federal data · admit rates and score ranges</small>
+      </button>
+      <button type="button" data-v="people">
+        <b>Real applicants</b><small>Community reports · individual outcomes, no rates</small>
+      </button>
+    </div>
+
+    <div class="card" id="collegesView">
       <div class="caveat">
         <b>A score range is not a cutoff.</b> A quarter of admitted students scored below the bottom of every
         range you'll see. These are institution-wide figures and don't reflect your major, your state, or
@@ -344,6 +398,51 @@
       <div id="results"></div>
       <div class="pager" id="pager"></div>
     </div>
+
+    <div class="card" id="peopleView" style="display:none">
+      <div class="bigwarn">
+        <b>These are anecdotes, not statistics.</b> Every profile below was written by someone who chose to
+        post their results on Reddit. People with good news post more often than people without it, so this
+        group is not representative of applicants generally.
+        <p><b>That is why you will not find a single admit rate on this page.</b> Any percentage computed
+        from these profiles would be wrong in a predictable direction — too high. For real rates, use the
+        Colleges tab, where the numbers come from the colleges themselves.</p>
+        <p>What this <em>is</em> good for: seeing that people with nearly identical numbers ended up in
+        very different places. No official dataset shows you that.</p>
+      </div>
+
+      <div class="counts" id="peopleCounts"></div>
+
+      <div class="resbar">
+        <div class="left" id="peopleCount"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label class="lbl" for="pBand" style="margin:0">Match</label>
+          <select id="pBand">
+            <option value="tight">Close to my stats</option>
+            <option value="standard" selected>Similar</option>
+            <option value="loose">Loosely similar</option>
+            <option value="all">Everyone</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+        <div class="field" style="max-width:220px;margin:0">
+          <label class="lbl" for="pGpa">Your unweighted GPA (optional)</label>
+          <input type="number" id="pGpa" min="0" max="4" step="0.01" placeholder="e.g. 3.9">
+        </div>
+        <div class="field" style="margin:0">
+          <label class="lbl" style="display:flex;align-items:center;gap:7px;cursor:pointer">
+            <input type="checkbox" id="pComplete" style="width:auto;margin:0">
+            Only complete records
+          </label>
+          <div class="hint" style="margin-top:3px">Hides posts that listed acceptances but no rejections</div>
+        </div>
+      </div>
+
+      <div id="peopleResults"></div>
+      <div class="pager" id="peoplePager"></div>
+    </div>
   </main>
 </div>
 
@@ -365,6 +464,11 @@ const $ = id => document.getElementById(id);
    Replaced wholesale by build_site.py; do not hand-edit.
    =================================================================== */
 const PACKED = /*<<<DATA>>>*/null/*<<<END>>>*/;
+
+/* Community-reported applicant profiles (r/collegeresults). Entirely separate
+   from the official data above and never mixed with it. Null when the site is
+   built without them, in which case the whole section stays hidden. */
+const PEOPLE_PACKED = /*<<<PEOPLE>>>*/null/*<<<ENDPEOPLE>>>*/;
 
 function unpack(p) {
   if (!p || !Array.isArray(p.rows)) return [];
@@ -645,7 +749,10 @@ $("testType").addEventListener("click", e => {
     ? "ACT composite, 1–36." : "SAT total, 400–1600.";
   state.page = 1; render();
 });
-$("score").addEventListener("input", e => { state.score = num(e.target.value); state.page = 1; render(); });
+$("score").addEventListener("input", e => {
+  state.score = num(e.target.value); state.page = 1; render();
+  if (PEOPLE.length) { pState.page = 1; renderPeople(); }
+});
 $("q").addEventListener("input", e => { state.q = e.target.value.trim(); state.page = 1; render(); });
 [["fState", "stateF"], ["fControl", "control"]].forEach(([id, k]) =>
   $(id).addEventListener("change", e => { state[k] = e.target.value; state.page = 1; render(); }));
@@ -792,8 +899,154 @@ document.addEventListener("drop", e => {
   const r = new FileReader(); r.onload = () => loadText(r.result, f.name); r.readAsText(f);
 });
 
+/* ===================================================================
+   COMMUNITY APPLICANT PROFILES
+   Deliberately shows counts and individual cases only. No admit rates
+   are computed anywhere in this section — see the warning in the UI.
+   =================================================================== */
+let PEOPLE = [];
+const P_PER_PAGE = 15;
+const P_BANDS = { tight: { gpa: 0.03, score: 20 }, standard: { gpa: 0.07, score: 40 },
+                  loose: { gpa: 0.15, score: 80 }, all: null };
+const pState = { band: "standard", gpa: null, page: 1, completeOnly: false };
+const isComplete = p => p.apps.some(a => a.result === "rejected" || a.result === "waitlisted");
+let currentView = "colleges";
+
+function unpackPeople(p) {
+  if (!p || !Array.isArray(p.rows)) return [];
+  const c = p.cols;
+  return p.rows.map(r => {
+    const o = {};
+    for (let i = 0; i < c.length; i++) o[c[i]] = r[i] === undefined ? null : r[i];
+    o.apps = (o.apps || []).map(a => ({ school: a[0], round: a[1], result: a[2] }));
+    return o;
+  });
+}
+
+function peopleFiltered() {
+  const b = P_BANDS[pState.band];
+  const target = state.test === "act" && state.score !== null
+    ? (ACT_TO_SAT_P[Math.round(state.score)] || null)
+    : state.score;
+  const base = pState.completeOnly ? PEOPLE.filter(isComplete) : PEOPLE;
+  if (!b) return { rows: base, excluded: 0 };
+  let excluded = 0;
+  const rows = base.filter(p => {
+    if (pState.gpa !== null && p.gpa !== null && Math.abs(p.gpa - pState.gpa) > b.gpa + 1e-9) return false;
+    if (pState.gpa !== null && p.gpa === null) return false;
+    if (target !== null) {
+      if (p.unified === null) { excluded++; return false; }
+      if (Math.abs(p.unified - target) > b.score) return false;
+    }
+    return true;
+  });
+  return { rows, excluded };
+}
+const ACT_TO_SAT_P = {36:1590,35:1540,34:1500,33:1460,32:1430,31:1400,30:1370,29:1340,28:1310,
+                      27:1280,26:1240,25:1210,24:1180,23:1140,22:1110,21:1070,20:1030,19:990,18:950};
+
+function outcomeRow(cls, label, apps) {
+  return `<div class="orow">
+    <div class="olabel ${cls}">${label} ${apps.length}</div>
+    <div class="olist${apps.length ? "" : " none"}">${
+      apps.length
+        ? apps.map(a => `${a.school}${a.round && a.round !== "RD" ? ` <span class="rnd">(${a.round})</span>` : ""}`).join(", ")
+        : "none reported"}</div></div>`;
+}
+
+function personHtml(p) {
+  const sc = [];
+  if (p.sat) sc.push(`SAT <b>${p.sat}</b>`);
+  if (p.act) sc.push(`ACT <b>${p.act}</b>`);
+  const scoreTxt = sc.length ? sc.join(`<span class="asep">·</span>`)
+                             : `<span style="color:var(--dim)">no score reported</span>`;
+  const meta = [p.major, p.ethnicity, p.gender,
+                p.residency ? (p.residency === "domestic" ? "Domestic" : "International") : null,
+                p.income ? `income ${p.income}` : null].filter(Boolean).join(" · ");
+  const acc = p.apps.filter(a => a.result === "accepted");
+  const wl  = p.apps.filter(a => a.result === "waitlisted");
+  const rej = p.apps.filter(a => a.result === "rejected");
+  const partial = acc.length > 0 && wl.length === 0 && rej.length === 0;
+  return `<div class="anec${partial ? " partial" : ""}">
+    <div class="ahead">
+      <div class="astats">GPA <b>${p.gpa === null ? "—" : p.gpa.toFixed(2)}</b><span class="asep">·</span>${scoreTxt}</div>
+      <div class="aid">${p.cycle ? p.cycle + " cycle" : ""}</div>
+    </div>
+    ${meta ? `<div class="ameta">${meta}</div>` : ""}
+    ${(p.ecs && p.ecs.length) ? `<div class="aecs">${p.ecs.slice(0, 5).map(e => `<span class="ec">${e}</span>`).join("")}</div>` : ""}
+    ${outcomeRow("o-acc", "Accepted", acc)}
+    ${outcomeRow("o-wl", "Waitlist", wl)}
+    ${outcomeRow("o-rej", "Rejected", rej)}
+    ${partial ? `<div class="partialnote"><b>Incomplete record.</b> This post listed
+      ${acc.length === 1 ? "a single acceptance" : "only acceptances"} and no rejections.
+      They may have committed early and stopped applying, or simply not written the rest down.
+      Do not read this as someone who got in everywhere.</div>` : ""}
+  </div>`;
+}
+
+function renderPeople() {
+  if (!PEOPLE.length) return;
+  const { rows, excluded } = peopleFiltered();
+  const pages = Math.max(1, Math.ceil(rows.length / P_PER_PAGE));
+  if (pState.page > pages) pState.page = pages;
+  const start = (pState.page - 1) * P_PER_PAGE;
+  const slice = rows.slice(start, start + P_PER_PAGE);
+
+  const apps = rows.flatMap(p => p.apps);
+  const schools = new Set(apps.map(a => a.school));
+  $("peopleCounts").innerHTML = rows.length ? `
+    <div class="c"><div class="n">${rows.length.toLocaleString()}</div><div class="l">people</div></div>
+    <div class="c"><div class="n">${apps.length.toLocaleString()}</div><div class="l">applications</div></div>
+    <div class="c"><div class="n">${schools.size.toLocaleString()}</div><div class="l">distinct schools</div></div>
+    <div class="c"><div class="n">${(apps.length / rows.length).toFixed(1)}</div><div class="l">apps per person</div></div>` : "";
+
+  $("peopleCount").innerHTML = rows.length
+    ? `Showing <b>${start + 1}–${start + slice.length}</b> of <b>${rows.length.toLocaleString()}</b>${
+        excluded ? ` · ${excluded} excluded for reporting no test score` : ""}`
+    : "";
+
+  $("peopleResults").innerHTML = rows.length
+    ? slice.map(personHtml).join("")
+    : `<div class="empty"><h3>Nobody in that range</h3>
+       <p>Try widening the match, or set it to <b>Everyone</b>.</p></div>`;
+
+  $("peoplePager").innerHTML = rows.length
+    ? `<button ${pState.page === 1 ? "disabled" : ""} data-pp="${pState.page - 1}">‹ Prev</button>
+       <span class="pinfo">Page ${pState.page} of ${pages}</span>
+       <button ${pState.page === pages ? "disabled" : ""} data-pp="${pState.page + 1}">Next ›</button>` : "";
+}
+
+function setView(v) {
+  currentView = v;
+  [...$("views").children].forEach(b => b.setAttribute("aria-pressed", b.dataset.v === v));
+  $("collegesView").style.display = v === "colleges" ? "" : "none";
+  $("peopleView").style.display = v === "people" ? "" : "none";
+  // the college filter panel is meaningless in the applicant view
+  const fc = document.querySelectorAll("aside .card")[1];
+  if (fc) fc.style.display = v === "colleges" ? "" : "none";
+  if (v === "people") renderPeople();
+}
+
+$("views").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  setView(b.dataset.v);
+});
+$("pBand").addEventListener("change", e => { pState.band = e.target.value; pState.page = 1; renderPeople(); });
+$("pGpa").addEventListener("input", e => { pState.gpa = num(e.target.value); pState.page = 1; renderPeople(); });
+$("pComplete").addEventListener("change", e => { pState.completeOnly = e.target.checked; pState.page = 1; renderPeople(); });
+$("peoplePager").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || b.disabled) return;
+  pState.page = +b.dataset.pp; renderPeople();
+  const m = document.querySelector("main");
+  if (m && m.scrollIntoView) m.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
 /* ---------- boot ---------- */
 loadList();
+if (PEOPLE_PACKED) {
+  PEOPLE = unpackPeople(PEOPLE_PACKED);
+  if (PEOPLE.length) $("views").style.display = "";
+}
 if (PACKED) {
   install(unpack(PACKED), Object.assign({ embedded: true }, PACKED.meta || {}));
 } else {

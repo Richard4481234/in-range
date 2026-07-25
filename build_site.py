@@ -26,6 +26,45 @@ COLS = ["id", "name", "city", "state", "control", "admit_rate",
         "tuition_in", "tuition_out", "grad_rate"]
 
 START, END = "/*<<<DATA>>>*/", "/*<<<END>>>*/"
+PSTART, PEND = "/*<<<PEOPLE>>>*/", "/*<<<ENDPEOPLE>>>*/"
+
+# Community profile fields. `apps` is packed as [school, round, result] triples.
+PCOLS = ["gpa", "sat", "act", "unified", "ethnicity", "gender", "residency",
+         "major", "income", "cycle", "ecs", "apps"]
+
+
+def pack_people(path: str) -> dict:
+    """Pack r/collegeresults profiles. Kept entirely separate from the official
+    data — the site never mixes the two or derives rates from these."""
+    with open(path, encoding="utf-8") as f:
+        raw = json.load(f)
+    profiles = raw["profiles"] if isinstance(raw, dict) else raw
+
+    rows, skipped = [], 0
+    for p in profiles:
+        apps = [[a.get("school"), a.get("round", "RD"), a.get("result")]
+                for a in (p.get("apps") or [])
+                if a.get("school") and a.get("result") in ("accepted", "waitlisted", "rejected")]
+        if not apps:
+            skipped += 1
+            continue
+        row = []
+        for c in PCOLS:
+            if c == "apps":
+                row.append(apps)
+            elif c == "ecs":
+                row.append([str(e)[:120] for e in (p.get("ecs") or [])][:5])
+            else:
+                v = p.get(c)
+                row.append(round(v, 3) if isinstance(v, float) else v)
+        rows.append(row)
+
+    meta = {}
+    if isinstance(raw, dict):
+        for k in ("source", "generated_utc", "note"):
+            if raw.get(k):
+                meta[k] = raw[k]
+    return {"cols": PCOLS, "meta": meta, "rows": rows, "skipped": skipped}
 
 
 def pack(path: str) -> dict:
@@ -72,6 +111,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", default="colleges.json")
+    ap.add_argument("--people", default="profiles.json",
+                    help="community profiles; skipped if absent")
+    ap.add_argument("--no-people", action="store_true",
+                    help="build without the Real applicants section")
     ap.add_argument("--template", default="in-range.html")
     ap.add_argument("--out", default="InRange.html")
     a = ap.parse_args()
@@ -90,20 +133,34 @@ def main():
               f"Use the original template file.", file=sys.stderr)
         sys.exit(1)
 
-    blob = json.dumps(packed, ensure_ascii=False, separators=(",", ":"))
-    # </script> inside a string literal would end the script block early
-    blob = blob.replace("</", "<\\/")
+    def inject(src: str, s: str, e: str, obj) -> str:
+        blob = json.dumps(obj, ensure_ascii=False, separators=(",", ":")) if obj is not None else "null"
+        # </script> inside a string literal would end the script block early
+        blob = blob.replace("</", "<\\/")
+        return re.sub(re.escape(s) + r".*?" + re.escape(e),
+                      lambda _m: s + blob + e, src, count=1, flags=re.S)
 
-    out = re.sub(re.escape(START) + r".*?" + re.escape(END),
-                 lambda _m: START + blob + END, html, count=1, flags=re.S)
+    out = inject(html, START, END, packed)
+
+    people = None
+    if not a.no_people and os.path.exists(a.people):
+        people = pack_people(a.people)
+    if PSTART in out and PEND in out:
+        out = inject(out, PSTART, PEND, people)
 
     with open(a.out, "w", encoding="utf-8") as f:
         f.write(out)
 
-    n = len(packed["rows"])
     size = os.path.getsize(a.out)
-    print(f"  schools embedded   {n:,}")
+    print(f"  schools embedded   {len(packed['rows']):,}")
     print(f"  data released      {packed['meta'].get('data_updated', 'unknown')}")
+    if people:
+        napps = sum(len(r[PCOLS.index('apps')]) for r in people["rows"])
+        print(f"  applicant profiles {len(people['rows']):,}  ({napps:,} applications)")
+        if people["skipped"]:
+            print(f"    skipped          {people['skipped']:,} with no usable outcomes")
+    else:
+        print(f"  applicant profiles none — 'Real applicants' section hidden")
     print(f"  {a.out}   {size/1e6:.2f} MB")
     print()
     print(f"  {a.out} is now standalone. Double-click it, email it, or drop it on")
