@@ -134,6 +134,15 @@
           padding:6px 11px;font-size:12.5px;cursor:pointer;font-family:inherit;white-space:nowrap}
   .addbtn:hover{border-color:var(--accent);color:var(--text)}
   .addbtn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .addbtn.seebtn{border-style:dashed}
+  .addbtn.seebtn:hover{border-style:solid}
+  .schoolfilter{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+                background:var(--accent-soft);border:1px solid var(--accent);border-radius:8px;
+                padding:10px 13px;margin-bottom:14px;font-size:13px}
+  .schoolfilter b{color:var(--text)}
+  .schoolfilter button{background:transparent;border:1px solid var(--line);color:var(--muted);
+                       border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit}
+  .schoolfilter button:hover{color:var(--text);border-color:var(--accent)}
 
   .pager{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:18px;flex-wrap:wrap}
   .pager button{background:var(--panel);border:1px solid var(--line);color:var(--muted);
@@ -428,6 +437,7 @@
         very different places. No official dataset shows you that.</p>
       </div>
 
+      <div id="schoolFilter"></div>
       <div class="srcline" id="peopleSrc" style="margin-bottom:16px"></div>
 
       <div class="counts" id="peopleCounts"></div>
@@ -649,6 +659,15 @@ function bandHtml(s) {
   </div>`;
 }
 
+/* Link from an official college page to the real applicants who applied there.
+   Shows a count of people, never a rate — the two datasets stay separate. */
+function peopleLinkHtml(s) {
+  const n = PEOPLE_BY_COLLEGE[s.id];
+  if (!n) return "";
+  return `<button class="addbtn seebtn" data-people="${s.id}"
+    title="Browse individual applicants who applied here">${n} applicant${n === 1 ? "" : "s"} →</button>`;
+}
+
 function schoolHtml(s) {
   const cls = classify(s);
   const chip = cls ? `<span class="chip ${CHIP[cls][1]}">${CHIP[cls][0]}</span>`
@@ -690,7 +709,10 @@ function schoolHtml(s) {
     ${bandHtml(s)}
     <div class="srow2">
       <div class="meta">${bits.join(" · ") || "&nbsp;"}</div>
-      <button class="addbtn ${inList ? "on" : ""}" data-add="${s.id}">${inList ? "✓ On my list" : "+ Add to list"}</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${peopleLinkHtml(s)}
+        <button class="addbtn ${inList ? "on" : ""}" data-add="${s.id}">${inList ? "✓ On my list" : "+ Add to list"}</button>
+      </div>
     </div>
   </div>`;
 }
@@ -809,6 +831,31 @@ $("pager").addEventListener("click", e => {
   state.page = +b.dataset.p; render();
   const m = document.querySelector("main");
   if (m && m.scrollIntoView) m.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+/* college card -> the applicants who applied there */
+$("results").addEventListener("click", e => {
+  const p = e.target.closest("[data-people]"); if (!p) return;
+  const cid = p.dataset.people;
+  const name = Object.keys(SCHOOL_LINKS).find(k => sameId(SCHOOL_LINKS[k], cid));
+  if (!name) return;
+  pState.school = name; pState.page = 1;
+  setView("people");
+  const m = document.querySelector("main");
+  if (m && m.scrollIntoView) m.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+/* back the other way, and clearing the filter */
+$("schoolFilter").addEventListener("click", e => {
+  const back = e.target.closest("[data-backto]");
+  if (back) {
+    pState.school = "";
+    state.q = findSchool(back.dataset.backto) ? findSchool(back.dataset.backto).name : "";
+    $("q").value = state.q; state.page = 1;
+    setView("colleges"); render();
+    return;
+  }
+  if (e.target.closest("[data-clearschool]")) { pState.school = ""; pState.page = 1; renderPeople(); }
 });
 
 $("results").addEventListener("click", e => {
@@ -938,10 +985,12 @@ document.addEventListener("drop", e => {
    are computed anywhere in this section — see the warning in the UI.
    =================================================================== */
 let PEOPLE = [];
+let SCHOOL_LINKS = {};        // community school name -> Scorecard id
+let PEOPLE_BY_COLLEGE = {};   // Scorecard id -> count of applicants
 const P_PER_PAGE = 15;
 const P_BANDS = { tight: { gpa: 0.03, score: 20 }, standard: { gpa: 0.07, score: 40 },
                   loose: { gpa: 0.15, score: 80 }, all: null };
-const pState = { band: "standard", gpa: null, page: 1, completeOnly: false };
+const pState = { band: "standard", gpa: null, page: 1, completeOnly: false, school: "" };
 const isComplete = p => p.apps.some(a => a.result === "rejected" || a.result === "waitlisted");
 let currentView = "colleges";
 
@@ -961,7 +1010,8 @@ function peopleFiltered() {
   const target = state.test === "act" && state.score !== null
     ? (ACT_TO_SAT_P[Math.round(state.score)] || null)
     : state.score;
-  const base = pState.completeOnly ? PEOPLE.filter(isComplete) : PEOPLE;
+  let base = pState.completeOnly ? PEOPLE.filter(isComplete) : PEOPLE;
+  if (pState.school) base = base.filter(p => p.apps.some(a => a.school === pState.school));
   if (!b) return { rows: base, excluded: 0 };
   let excluded = 0;
   const rows = base.filter(p => {
@@ -1040,9 +1090,22 @@ function renderPeopleSource() {
      waitlist; the rest are flagged below as incomplete.</span>`;
 }
 
+function renderSchoolFilter() {
+  if (!pState.school) { $("schoolFilter").innerHTML = ""; return; }
+  const cid = SCHOOL_LINKS[pState.school];
+  const col = cid !== undefined ? findSchool(cid) : null;
+  $("schoolFilter").innerHTML = `<div class="schoolfilter">
+    <div>Showing only people who applied to <b>${col ? col.name : pState.school}</b></div>
+    <div style="display:flex;gap:7px">
+      ${col ? `<button data-backto="${col.id}">See its official data</button>` : ""}
+      <button data-clearschool="1">Show everyone</button>
+    </div></div>`;
+}
+
 function renderPeople() {
   if (!PEOPLE.length) return;
   renderPeopleSource();
+  renderSchoolFilter();
   const { rows, excluded } = peopleFiltered();
   const pages = Math.max(1, Math.ceil(rows.length / P_PER_PAGE));
   if (pState.page > pages) pState.page = pages;
@@ -1102,6 +1165,18 @@ $("peoplePager").addEventListener("click", e => {
 loadList();
 if (PEOPLE_PACKED) {
   PEOPLE = unpackPeople(PEOPLE_PACKED);
+  SCHOOL_LINKS = PEOPLE_PACKED.links || {};
+  // how many distinct applicants touched each linked college
+  const seen = {};
+  for (const p of PEOPLE) {
+    const ids = new Set();
+    for (const a of p.apps) {
+      const cid = SCHOOL_LINKS[a.school];
+      if (cid !== undefined) ids.add(cid);
+    }
+    ids.forEach(cid => { seen[cid] = (seen[cid] || 0) + 1; });
+  }
+  PEOPLE_BY_COLLEGE = seen;
   if (PEOPLE.length) $("views").style.display = "";
 }
 if (PACKED) {

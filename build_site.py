@@ -33,6 +33,87 @@ PCOLS = ["gpa", "sat", "act", "unified", "ethnicity", "gender", "residency",
          "major", "income", "cycle", "ecs", "apps"]
 
 
+# ---------------------------------------------------------------------
+# Linking the two datasets.
+#
+# The community catalog uses short names ("UC Berkeley"); the Scorecard uses
+# official ones ("University of California-Berkeley"). Fuzzy matching is not
+# safe here — an earlier attempt mapped "Virginia Tech" onto "University of
+# Virginia", which are unrelated institutions. So: exact normalised match, or
+# an explicit entry below, or no link at all. Never a guess.
+#
+# Every entry here was verified to exist in colleges.json.
+# ---------------------------------------------------------------------
+SCHOOL_ALIAS = {
+    "UC Berkeley": "University of California-Berkeley",
+    "UCLA": "University of California-Los Angeles",
+    "UC San Diego": "University of California-San Diego",
+    "UC Davis": "University of California-Davis",
+    "UC Irvine": "University of California-Irvine",
+    "UC Santa Barbara": "University of California-Santa Barbara",
+    "UC Santa Cruz": "University of California-Santa Cruz",
+    "UC Riverside": "University of California-Riverside",
+    "UC Merced": "University of California-Merced",
+    "MIT": "Massachusetts Institute of Technology",
+    "Caltech": "California Institute of Technology",
+    "Georgia Tech": "Georgia Institute of Technology-Main Campus",
+    "Virginia Tech": "Virginia Polytechnic Institute and State University",
+    "UIUC": "University of Illinois Urbana-Champaign",
+    "UT Austin": "The University of Texas at Austin",
+    "UNC Chapel Hill": "University of North Carolina at Chapel Hill",
+    "UMass Amherst": "University of Massachusetts-Amherst",
+    "University of Michigan": "University of Michigan-Ann Arbor",
+    "Penn State University": "Pennsylvania State University-Main Campus",
+    "Rutgers University": "Rutgers University-New Brunswick",
+    "Rutgers Newark": "Rutgers University-Newark",
+    "Arizona State University": "Arizona State University Campus Immersion",
+    "Texas A&M University": "Texas A&M University-College Station",
+    "North Carolina State University": "North Carolina State University at Raleigh",
+    "Tulane University": "Tulane University of Louisiana",
+    "Columbia University": "Columbia University in the City of New York",
+    "Indiana University": "Indiana University-Bloomington",
+    "University of Maryland": "University of Maryland-College Park",
+    "University of Minnesota": "University of Minnesota-Twin Cities",
+    "University of Missouri": "University of Missouri-Columbia",
+    "University of Nebraska": "University of Nebraska-Lincoln",
+    "University of Oklahoma": "University of Oklahoma-Norman Campus",
+    "University of Pittsburgh": "University of Pittsburgh-Pittsburgh Campus",
+    "University of South Carolina": "University of South Carolina-Columbia",
+    "University of Tennessee": "The University of Tennessee-Knoxville",
+    "University of Washington": "University of Washington-Seattle Campus",
+    "Cal Poly San Luis Obispo": "California Polytechnic State University-San Luis Obispo",
+    "Cal Poly Pomona": "California State Polytechnic University-Pomona",
+    "College of William & Mary": "William & Mary",
+}
+# Deliberately unlinked: non-US institutions (Oxford, Toronto, NUS and so on)
+# are absent from a US federal dataset, and "University of Nevada" is ambiguous
+# between Reno and Las Vegas.
+
+
+def _norm(s: str) -> str:
+    s = s.lower().replace("&", "and").replace("–", "-").replace("—", "-")
+    s = re.sub(r"[^a-z0-9 ]", " ", s)
+    s = re.sub(r"\b(the|of|at|main campus|campus)\b", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def link_schools(colleges: list[dict], people_rows: list[list], apps_ix: int) -> tuple[dict, int, int]:
+    """Map community school names onto Scorecard ids. Returns (name -> id)."""
+    by_norm = {}
+    for s in colleges:
+        by_norm.setdefault(_norm(s["name"]), s["id"])
+    names = {a[0] for r in people_rows for a in r[apps_ix]}
+    out, unlinked = {}, []
+    for n in sorted(names):
+        target = SCHOOL_ALIAS.get(n, n)
+        sid = by_norm.get(_norm(target))
+        if sid is not None:
+            out[n] = sid
+        else:
+            unlinked.append(n)
+    return out, len(out), len(unlinked)
+
+
 def pack_people(path: str) -> dict:
     """Pack r/collegeresults profiles. Kept entirely separate from the official
     data — the site never mixes the two or derives rates from these."""
@@ -145,6 +226,10 @@ def main():
     people = None
     if not a.no_people and os.path.exists(a.people):
         people = pack_people(a.people)
+        links, nlinked, nunlinked = link_schools(
+            [dict(zip(COLS, r)) for r in packed["rows"]], people["rows"], PCOLS.index("apps"))
+        people["links"] = links
+        people["linked"], people["unlinked"] = nlinked, nunlinked
     if PSTART in out and PEND in out:
         out = inject(out, PSTART, PEND, people)
 
@@ -159,6 +244,8 @@ def main():
         print(f"  applicant profiles {len(people['rows']):,}  ({napps:,} applications)")
         if people["skipped"]:
             print(f"    skipped          {people['skipped']:,} with no usable outcomes")
+        print(f"    linked to a college page: {people['linked']} school names "
+              f"({people['unlinked']} unlinked — non-US or ambiguous)")
     else:
         print(f"  applicant profiles none — 'Real applicants' section hidden")
     print(f"  {a.out}   {size/1e6:.2f} MB")
