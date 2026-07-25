@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In Range — where you actually stand</title>
+<style>
+  :root {
+    --bg:#0d1117; --panel:#151b23; --panel-2:#1c232d; --line:#2a3441;
+    --text:#e6edf3; --muted:#9aa7b4; --dim:#6e7d8d;
+    --accent:#4c8dff; --accent-soft:#4c8dff22;
+    --good:#3fb950; --good-soft:#3fb95018;
+    --warn:#d29922; --warn-soft:#d2992218;
+    --bad:#f85149;  --bad-soft:#f8514918;
+    --radius:10px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  html[data-theme="light"]{
+    --bg:#f6f8fa; --panel:#fff; --panel-2:#f0f3f6; --line:#d8dee4;
+    --text:#1f2328; --muted:#57606a; --dim:#7d8590;
+    --accent:#0757ba; --accent-soft:#0757ba14;
+    --good:#1a7f37; --good-soft:#1a7f3714;
+    --warn:#9a6700; --warn-soft:#9a670014;
+    --bad:#cf222e;  --bad-soft:#cf222e14;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  a{color:var(--accent)}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 20px 80px}
+
+  header{padding:34px 0 22px}
+  .titlerow{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap}
+  h1{font-size:29px;margin:0 0 5px;letter-spacing:-.5px}
+  h1 span{color:var(--accent)}
+  .tagline{color:var(--muted);margin:0 0 14px;font-size:15.5px}
+  .lede{color:var(--muted);max-width:730px;margin:0;font-size:14.5px}
+  .themebtn{background:var(--panel);border:1px solid var(--line);color:var(--muted);
+            border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;white-space:nowrap}
+  .themebtn:hover{color:var(--text);border-color:var(--accent)}
+
+  details.method{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+  details.method>summary{cursor:pointer;padding:12px 16px;font-size:13.5px;font-weight:600;color:var(--muted);list-style:none}
+  details.method>summary::-webkit-details-marker{display:none}
+  details.method>summary::before{content:"▸ ";color:var(--accent)}
+  details.method[open]>summary::before{content:"▾ "}
+  details.method>summary:hover{color:var(--text)}
+  .mb{padding:14px 16px 16px;font-size:13.5px;color:var(--muted);border-top:1px solid var(--line)}
+  .mb h4{color:var(--text);margin:16px 0 6px;font-size:13.5px}
+  .mb h4:first-child{margin-top:0}
+  .mb ul{margin:6px 0;padding-left:20px}
+  .mb li{margin-bottom:5px}
+  .mb code{font-family:var(--mono);font-size:12.5px;background:var(--panel-2);padding:1px 5px;border-radius:4px}
+
+  .cols{display:grid;grid-template-columns:290px 1fr;gap:20px;align-items:start}
+  @media(max-width:980px){.cols{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:17px}
+  .card+.card{margin-top:16px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.7px;color:var(--dim);margin:0 0 14px;font-weight:700}
+  aside{position:sticky;top:16px}
+  @media(max-width:980px){aside{position:static}}
+
+  .field{margin-bottom:14px}
+  .field:last-child{margin-bottom:0}
+  label.lbl{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px;font-weight:600}
+  input[type=text],input[type=number],select{width:100%;background:var(--panel-2);color:var(--text);
+     border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:14px;font-family:inherit}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  input::placeholder{color:var(--dim)}
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .hint{font-size:11.5px;color:var(--dim);margin-top:5px;line-height:1.45}
+  .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .seg button{flex:1;background:var(--panel-2);border:0;color:var(--muted);padding:7px 4px;
+              font-size:12.5px;cursor:pointer;font-family:inherit;border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:0}
+  .seg button[aria-pressed=true]{background:var(--accent);color:#fff;font-weight:600}
+  .btn{background:var(--accent);color:#fff;border:0;border-radius:7px;padding:9px 14px;
+       font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit}
+  .btn:hover{filter:brightness(1.1)}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:500}
+  .btn.ghost:hover{color:var(--text);border-color:var(--accent);filter:none}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+
+  /* ---- school card ---- */
+  .resbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .resbar .left{color:var(--muted);font-size:13.5px}
+  .resbar select{width:auto;padding:6px 9px;font-size:13px}
+
+  .school{border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;margin-bottom:11px;background:var(--panel)}
+  .shead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:3px}
+  .sname{font-size:16px;font-weight:650}
+  .sloc{color:var(--muted);font-size:12.5px}
+  .chip{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;
+        padding:3px 9px;border-radius:5px;white-space:nowrap}
+  .c-likely{color:var(--good);background:var(--good-soft)}
+  .c-target{color:var(--accent);background:var(--accent-soft)}
+  .c-reach{color:var(--warn);background:var(--warn-soft)}
+  .c-hard{color:var(--bad);background:var(--bad-soft)}
+  .c-none{color:var(--dim);background:var(--panel-2)}
+
+  .facts{display:flex;gap:22px;flex-wrap:wrap;margin:11px 0 4px}
+  .fact .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);font-weight:700}
+  .fact .v{font-size:19px;font-weight:700;font-family:var(--mono)}
+  .fact .v small{font-size:12px;color:var(--muted);font-weight:400;font-family:inherit}
+  .fact .v.na{font-size:14px;color:var(--dim);font-weight:400;font-family:inherit}
+
+  .bandwrap{margin-top:12px}
+  .bandlabels{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);font-family:var(--mono);margin-bottom:3px}
+  .track{position:relative;height:26px;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .band{position:absolute;top:0;bottom:0;background:var(--accent-soft);border-left:2px solid var(--accent);border-right:2px solid var(--accent)}
+  .bandmid{position:absolute;top:0;bottom:0;width:1px;background:var(--accent);opacity:.4}
+  .you{position:absolute;top:-3px;bottom:-3px;width:3px;background:var(--text);border-radius:2px}
+  .you::after{content:"you";position:absolute;top:-15px;left:50%;transform:translateX(-50%);
+              font-size:9.5px;letter-spacing:.5px;color:var(--text);font-weight:700;text-transform:uppercase}
+  .bandnote{font-size:12px;color:var(--muted);margin-top:9px}
+  .bandnote b{color:var(--text)}
+
+  .srow2{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .meta{font-size:12px;color:var(--dim)}
+  .meta b{color:var(--muted);font-weight:600}
+  .addbtn{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:7px;
+          padding:6px 11px;font-size:12.5px;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .addbtn:hover{border-color:var(--accent);color:var(--text)}
+  .addbtn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+
+  .pager{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:18px;flex-wrap:wrap}
+  .pager button{background:var(--panel);border:1px solid var(--line);color:var(--muted);
+                border-radius:7px;padding:7px 12px;cursor:pointer;font-size:13px;font-family:inherit}
+  .pager button:hover:not(:disabled){color:var(--text);border-color:var(--accent)}
+  .pager button:disabled{opacity:.35;cursor:default}
+  .pinfo{color:var(--muted);font-size:13px;padding:0 6px}
+
+  .empty{text-align:center;padding:46px 20px;color:var(--muted)}
+  .empty h3{color:var(--text);margin:0 0 8px;font-size:18px}
+
+  .balance{display:grid;gap:7px;margin-top:4px}
+  .brow{display:grid;grid-template-columns:1fr auto;gap:10px;font-size:13px;align-items:center}
+  .listitem{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--line)}
+  .listitem:last-child{border-bottom:0}
+  .listitem button{background:none;border:0;color:var(--dim);cursor:pointer;font-size:14px;line-height:1;padding:0 2px}
+  .listitem button:hover{color:var(--bad)}
+  .advice{font-size:12.5px;border-radius:7px;padding:10px 12px;margin-top:12px;border:1px solid var(--line)}
+  .advice.warn{background:var(--warn-soft);border-left:3px solid var(--warn);color:var(--muted)}
+  .advice.ok{background:var(--good-soft);border-left:3px solid var(--good);color:var(--muted)}
+
+  .srcline{font-size:12.5px;color:var(--muted);background:var(--panel-2);border:1px solid var(--line);
+           border-radius:7px;padding:10px 12px}
+  .srcline b{color:var(--text)}
+  .tag{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;
+       font-weight:700;padding:2px 7px;border-radius:4px;margin-bottom:6px}
+  .tag.real{color:var(--good);background:var(--good-soft)}
+  .tag.none{color:var(--warn);background:var(--warn-soft)}
+
+  .caveat{background:var(--warn-soft);border:1px solid var(--line);border-left:3px solid var(--warn);
+          border-radius:7px;padding:11px 13px;font-size:12.5px;color:var(--muted);margin-bottom:15px}
+  .caveat b{color:var(--warn)}
+  footer{margin-top:36px;padding-top:18px;border-top:1px solid var(--line);color:var(--dim);font-size:12.5px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);
+         background:var(--accent);color:#fff;padding:10px 18px;border-radius:8px;font-size:13.5px;
+         font-weight:600;transition:transform .25s;z-index:50;pointer-events:none}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  body.dragging::after{content:"Drop colleges.json to load";position:fixed;inset:0;z-index:100;
+    background:var(--accent-soft);border:3px dashed var(--accent);display:flex;align-items:center;
+    justify-content:center;font-size:20px;font-weight:700;color:var(--accent);pointer-events:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="titlerow">
+    <div>
+      <h1>In<span>Range</span></h1>
+      <p class="tagline">Where your scores actually sit at every four-year college in the country.</p>
+    </div>
+    <button class="themebtn" id="themeBtn">◐ Theme</button>
+  </div>
+  <p class="lede">
+    Official figures from the U.S. Department of Education's College Scorecard — admission rates and the
+    test scores of admitted students, reported by the colleges themselves. Not a survey, not scraped from
+    anywhere, and not anyone's opinion. Enter a score and see where you fall.
+  </p>
+
+  <details class="method">
+    <summary>What these numbers mean — and what they can't tell you</summary>
+    <div class="mb">
+      <h4>Where the data comes from</h4>
+      <p style="margin-top:0">
+        The College Scorecard publishes data that institutions report through IPEDS, the federal reporting
+        system every accredited college is required to use. It covers essentially all of them, so there's no
+        sampling and no volunteer bias. Run <code>get_college_data.py</code> to download it.
+      </p>
+      <p>
+        Admissions figures typically describe a cycle one to two years old — reporting takes time. Check the
+        <b>Dataset</b> panel for the vintage of the file you loaded.
+      </p>
+
+      <h4>What "middle 50%" means</h4>
+      <p>
+        The range shown is the 25th to 75th percentile of <b>admitted and enrolled</b> students' scores.
+        A quarter of admitted students scored below the bottom number. A quarter scored above the top one.
+      </p>
+      <p>
+        So it is <b>not a cutoff</b>. Being under the 25th percentile does not disqualify you, and being over
+        the 75th does not admit you. It tells you what kind of academic company you'd be in.
+      </p>
+
+      <h4>Why there is no "chance me" percentage here</h4>
+      <p>
+        A tool that multiplies your score by an admit rate and hands back "you have a 23% chance" is making
+        that number up. Admissions offices read essays, recommendations, course rigor, context, and their own
+        institutional needs — none of which appear in this data or any public dataset.
+      </p>
+      <p>
+        So this shows you <b>two separate facts</b> and refuses to blend them: how selective the school is
+        overall, and where your score sits among admitted students. You draw the conclusion.
+      </p>
+
+      <h4>How the Likely / Target / Reach label works</h4>
+      <ul>
+        <li>The starting point is the admit rate alone: 75%+ is Likely, 50–75% Target, 20–50% Reach.</li>
+        <li>Scoring above the 75th percentile shifts it one step easier. Below the 25th shifts it one step harder.</li>
+        <li><b>Any school admitting under 20% stays a reach no matter what you score.</b> At those schools most
+            rejected applicants are academically qualified, so a strong score buys far less than it appears to.
+            A tool that calls Stanford a "target" because your SAT is 1560 is lying to you.</li>
+        <li>Schools that report no admit rate get no label. Blank is more honest than a guess.</li>
+      </ul>
+
+      <h4>What's missing</h4>
+      <ul>
+        <li><b>GPA.</b> The federal data doesn't collect it, so this tool doesn't ask for it. Anyone showing
+            you a GPA cutoff got it from a survey or made it up.</li>
+        <li><b>Major-level admissions.</b> Engineering and nursing are often far harder than the university
+            number suggests. These are institution-wide figures.</li>
+        <li><b>In-state versus out-of-state admit rates.</b> At public universities the gap is often enormous.
+            Only the combined rate is published here.</li>
+        <li><b>Early versus regular.</b> Not reported at this level.</li>
+        <li>Test-optional schools' ranges now describe only those who submitted scores, which skews them upward.</li>
+      </ul>
+    </div>
+  </details>
+</header>
+
+<div class="cols">
+  <aside>
+    <div class="card">
+      <h2>Your score</h2>
+      <div class="field">
+        <div class="seg" id="testType">
+          <button type="button" data-t="sat" aria-pressed="true">SAT</button>
+          <button type="button" data-t="act">ACT</button>
+        </div>
+      </div>
+      <div class="field">
+        <input type="number" id="score" placeholder="1400">
+        <div class="hint" id="scoreHint">Leave blank to browse without comparing.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Filters</h2>
+      <div class="field">
+        <label class="lbl" for="q">School name</label>
+        <input type="text" id="q" placeholder="Search…">
+      </div>
+      <div class="field">
+        <label class="lbl" for="fState">State</label>
+        <select id="fState"><option value="">Any</option></select>
+      </div>
+      <div class="field">
+        <label class="lbl" for="fControl">Type</label>
+        <select id="fControl">
+          <option value="">Any</option>
+          <option>Public</option>
+          <option>Private nonprofit</option>
+          <option>Private for-profit</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="lbl">Admit rate</label>
+        <div class="duo">
+          <input type="number" id="admMin" placeholder="min %" min="0" max="100">
+          <input type="number" id="admMax" placeholder="max %" min="0" max="100">
+        </div>
+      </div>
+      <div class="field">
+        <label class="lbl">Undergrad size</label>
+        <div class="duo">
+          <input type="number" id="sizeMin" placeholder="min">
+          <input type="number" id="sizeMax" placeholder="max">
+        </div>
+      </div>
+      <div class="field">
+        <label class="lbl" for="tuitionMax">Max in-state tuition ($)</label>
+        <input type="number" id="tuitionMax" placeholder="any">
+      </div>
+      <div class="field">
+        <label class="lbl"><input type="checkbox" id="onlyScored" style="width:auto;margin-right:6px">Only schools reporting scores</label>
+      </div>
+      <div class="btnrow"><button class="btn ghost" id="resetBtn">Reset filters</button></div>
+    </div>
+
+    <div class="card" id="listCard">
+      <h2>My list <span id="listCount" style="color:var(--accent)"></span></h2>
+      <div id="listBody"></div>
+    </div>
+
+    <div class="card">
+      <h2>Dataset</h2>
+      <div class="srcline" id="srcLine"></div>
+      <div class="btnrow">
+        <button class="btn ghost" id="loadBtn">Load newer data</button>
+      </div>
+      <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+      <div class="hint" style="margin-top:9px">
+        The data is inside this file — nothing to install. When a new edition is published
+        (roughly annually), run <code>get_college_data.py</code> and drop the fresh
+        <code>colleges.json</code> anywhere on this page. Everything stays on your computer.
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="card">
+      <div class="caveat">
+        <b>A score range is not a cutoff.</b> A quarter of admitted students scored below the bottom of every
+        range you'll see. These are institution-wide figures and don't reflect your major, your state, or
+        anything an admissions officer reads in your file.
+      </div>
+      <div class="resbar">
+        <div class="left" id="resCount"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label class="lbl" for="sort" style="margin:0">Sort</label>
+          <select id="sort">
+            <option value="selectivity">Most selective first</option>
+            <option value="least">Least selective first</option>
+            <option value="fit">Best fit for my score</option>
+            <option value="name">Name (A–Z)</option>
+            <option value="size">Largest</option>
+            <option value="cost">Cheapest (in-state)</option>
+          </select>
+        </div>
+      </div>
+      <div id="results"></div>
+      <div class="pager" id="pager"></div>
+    </div>
+  </main>
+</div>
+
+<footer>
+  Data: U.S. Department of Education, College Scorecard · single file, no tracking, no uploads
+</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+/* ===================================================================
+   EMBEDDED DATA
+   The College Scorecard extract ships inside this file, stored as a
+   column list plus one array per school rather than 1,715 repeated
+   JSON objects — same data, roughly half the bytes.
+   Replaced wholesale by build_site.py; do not hand-edit.
+   =================================================================== */
+const PACKED = /*<<<DATA>>>*/null/*<<<END>>>*/;
+
+function unpack(p) {
+  if (!p || !Array.isArray(p.rows)) return [];
+  const cols = p.cols;
+  return p.rows.map(r => {
+    const o = {};
+    for (let i = 0; i < cols.length; i++) o[cols[i]] = r[i] === undefined ? null : r[i];
+    return o;
+  });
+}
+
+let SCHOOLS = [], META = null, CURRENT = [];
+let myList = [];
+const PER_PAGE = 25;
+
+const state = {
+  test: "sat", score: null, q: "", stateF: "", control: "",
+  admMin: null, admMax: null, sizeMin: null, sizeMax: null, tuitionMax: null,
+  onlyScored: false, sort: "selectivity", page: 1
+};
+
+/* ---------- persistence (best effort; harmless if unavailable) ---------- */
+function saveList() {
+  try { localStorage.setItem("inrange.list", JSON.stringify(myList)); } catch (e) {}
+}
+function loadList() {
+  try {
+    const raw = localStorage.getItem("inrange.list");
+    if (raw) myList = JSON.parse(raw) || [];
+  } catch (e) { myList = []; }
+}
+
+/* ---------- helpers ---------- */
+/* IDs arrive as numbers from some files and strings from others (a DOM
+   data-attribute is always a string). Compare them as text so the two can
+   never silently fail to match. */
+const sameId = (a, b) => String(a) === String(b);
+const findSchool = id => SCHOOLS.find(x => sameId(x.id, id));
+
+const pct = v => v === null || v === undefined ? "—" : (v * 100 < 10 ? (v * 100).toFixed(1) : Math.round(v * 100)) + "%";
+const money = v => v ? "$" + v.toLocaleString() : null;
+const num = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+
+function range(s) {
+  return state.test === "act" ? [s.act25, s.act75] : [s.sat25, s.sat75];
+}
+function scale() {
+  return state.test === "act" ? [11, 36] : [600, 1600];
+}
+
+/* Where the score sits relative to the admitted middle 50%. */
+function position(s) {
+  const [lo, hi] = range(s);
+  if (state.score === null || lo === null || hi === null) return null;
+  if (state.score < lo) return "below";
+  if (state.score > hi) return "above";
+  return "in";
+}
+
+/* Approximate percentile by interpolating between the two published points.
+   Only meaningful inside the range, which is why it's labelled "about". */
+function approxPercentile(s) {
+  const [lo, hi] = range(s);
+  if (state.score === null || lo === null || hi === null || hi === lo) return null;
+  if (state.score < lo || state.score > hi) return null;
+  return Math.round(25 + 50 * (state.score - lo) / (hi - lo));
+}
+
+/*  Two separate facts, deliberately not multiplied into a fake probability.
+    Selectivity sets the baseline; score position nudges it one step. */
+const LADDER = ["hard", "reach", "target", "likely"];
+function classify(s) {
+  const a = s.admit_rate;
+  if (a === null || a === undefined) return null;
+  if (a < 0.20) return "hard";                       // floor: never movable
+  let i = a >= 0.75 ? 3 : a >= 0.50 ? 2 : 1;
+  const p = position(s);
+  if (p === "above") i = Math.min(3, i + 1);
+  else if (p === "below") i = Math.max(1, i - 1);
+  return LADDER[i];
+}
+const CHIP = {
+  likely: ["Likely", "c-likely"], target: ["Target", "c-target"],
+  reach:  ["Reach",  "c-reach"],  hard:   ["Reach for everyone", "c-hard"]
+};
+
+/* ---------- filtering ---------- */
+function apply() {
+  const q = state.q.toLowerCase();
+  let out = SCHOOLS.filter(s => {
+    if (q && !s.name.toLowerCase().includes(q) && !(s.city || "").toLowerCase().includes(q)) return false;
+    if (state.stateF && s.state !== state.stateF) return false;
+    if (state.control && s.control !== state.control) return false;
+    if (state.admMin !== null && (s.admit_rate === null || s.admit_rate * 100 < state.admMin)) return false;
+    if (state.admMax !== null && (s.admit_rate === null || s.admit_rate * 100 > state.admMax)) return false;
+    if (state.sizeMin !== null && (s.size === null || s.size < state.sizeMin)) return false;
+    if (state.sizeMax !== null && (s.size === null || s.size > state.sizeMax)) return false;
+    if (state.tuitionMax !== null && (s.tuition_in === null || s.tuition_in > state.tuitionMax)) return false;
+    if (state.onlyScored) { const [lo, hi] = range(s); if (lo === null || hi === null) return false; }
+    return true;
+  });
+
+  const fit = s => {
+    const [lo, hi] = range(s);
+    if (state.score === null || lo === null || hi === null) return 1e9;
+    const mid = (lo + hi) / 2;
+    return Math.abs(state.score - mid) / Math.max(hi - lo, 1);
+  };
+  // Unreported values sort last in both directions, rather than masquerading
+  // as either the most or the least selective school in the country.
+  const inf = v => v === null || v === undefined ? Infinity : v;
+  const neg = v => v === null || v === undefined ? -Infinity : v;
+  switch (state.sort) {
+    case "least": out.sort((a, b) => neg(b.admit_rate) - neg(a.admit_rate) || a.name.localeCompare(b.name)); break;
+    case "fit":   out.sort((a, b) => fit(a) - fit(b) || inf(a.admit_rate) - inf(b.admit_rate)); break;
+    case "name":  out.sort((a, b) => a.name.localeCompare(b.name)); break;
+    case "size":  out.sort((a, b) => (b.size || 0) - (a.size || 0)); break;
+    case "cost":  out.sort((a, b) => inf(a.tuition_in) - inf(b.tuition_in)); break;
+    default:      out.sort((a, b) => inf(a.admit_rate) - inf(b.admit_rate) || a.name.localeCompare(b.name));
+  }
+  return out;
+}
+
+/* ---------- render ---------- */
+function bandHtml(s) {
+  const [lo, hi] = range(s);
+  const [smin, smax] = scale();
+  const label = state.test === "act" ? "ACT" : "SAT";
+  if (lo === null || hi === null) {
+    return `<div class="bandwrap"><div class="bandnote" style="color:var(--dim)">
+      No ${label} range reported — often means test-blind, test-optional with too few submissions,
+      or open admission.</div></div>`;
+  }
+  const p = v => 100 * (Math.max(smin, Math.min(smax, v)) - smin) / (smax - smin);
+  const you = state.score !== null
+    ? `<div class="you" style="left:${p(state.score)}%"></div>` : "";
+  const pos = position(s), pctile = approxPercentile(s);
+  let note;
+  if (state.score === null) {
+    note = `Middle 50% of admitted students: <b>${lo}–${hi}</b>. Enter your score to compare.`;
+  } else if (pos === "in") {
+    note = `Your <b>${state.score}</b> is inside their middle 50% (<b>${lo}–${hi}</b>) — about the
+            <b>${pctile}th percentile</b> of admitted students.`;
+  } else if (pos === "below") {
+    note = `Your <b>${state.score}</b> is below their 25th percentile of <b>${lo}</b>. A quarter of
+            admitted students were also below it, so this isn't a cutoff — but you'd be in the lower band.`;
+  } else {
+    note = `Your <b>${state.score}</b> is above their 75th percentile of <b>${hi}</b> —
+            stronger than at least three quarters of admitted students.`;
+  }
+  return `<div class="bandwrap">
+    <div class="bandlabels"><span>${smin}</span><span>${label} range of admitted students</span><span>${smax}</span></div>
+    <div class="track">
+      <div class="band" style="left:${p(lo)}%;width:${Math.max(p(hi) - p(lo), 0.6)}%"></div>
+      ${you}
+    </div>
+    <div class="bandnote">${note}</div>
+  </div>`;
+}
+
+function schoolHtml(s) {
+  const cls = classify(s);
+  const chip = cls ? `<span class="chip ${CHIP[cls][1]}">${CHIP[cls][0]}</span>`
+                   : `<span class="chip c-none">no admit rate reported</span>`;
+  const inList = myList.some(x => sameId(x.id, s.id));
+  const bits = [];
+  if (s.size) bits.push(`<b>${s.size.toLocaleString()}</b> undergrads`);
+  if (s.tuition_in) bits.push(`in-state <b>${money(s.tuition_in)}</b>`);
+  if (s.tuition_out && s.tuition_out !== s.tuition_in) bits.push(`out <b>${money(s.tuition_out)}</b>`);
+  if (s.grad_rate) bits.push(`<b>${Math.round(s.grad_rate * 100)}%</b> grad rate`);
+
+  return `<div class="school">
+    <div class="shead">
+      <div>
+        <div class="sname">${s.name}</div>
+        <div class="sloc">${[s.city, s.state].filter(Boolean).join(", ")}${s.control ? " · " + s.control : ""}</div>
+      </div>
+      ${chip}
+    </div>
+    <div class="facts">
+      <div class="fact"><div class="k">Admit rate</div>
+        <div class="v ${s.admit_rate === null ? "na" : ""}">${s.admit_rate === null ? "not reported" : pct(s.admit_rate)}</div></div>
+      <div class="fact"><div class="k">${state.test.toUpperCase()} middle 50%</div>
+        <div class="v ${range(s)[0] === null ? "na" : ""}">${range(s)[0] === null ? "not reported" : range(s)[0] + "–" + range(s)[1]}</div></div>
+    </div>
+    ${bandHtml(s)}
+    <div class="srow2">
+      <div class="meta">${bits.join(" · ") || "&nbsp;"}</div>
+      <button class="addbtn ${inList ? "on" : ""}" data-add="${s.id}">${inList ? "✓ On my list" : "+ Add to list"}</button>
+    </div>
+  </div>`;
+}
+
+function render() {
+  if (!SCHOOLS.length) {
+    $("results").innerHTML = `<div class="empty">
+      <h3>No data loaded yet</h3>
+      <p>Run <b>get_college_data.py</b> to download the official file, then drop
+         <b>colleges.json</b> onto this page.</p></div>`;
+    $("resCount").textContent = ""; $("pager").innerHTML = "";
+    renderList(); return;
+  }
+  CURRENT = apply();
+  const pages = Math.max(1, Math.ceil(CURRENT.length / PER_PAGE));
+  if (state.page > pages) state.page = pages;
+  const start = (state.page - 1) * PER_PAGE;
+  const slice = CURRENT.slice(start, start + PER_PAGE);
+
+  $("resCount").innerHTML = CURRENT.length
+    ? `Showing <b>${start + 1}–${start + slice.length}</b> of <b>${CURRENT.length.toLocaleString()}</b> schools`
+    : "";
+
+  $("results").innerHTML = CURRENT.length
+    ? slice.map(schoolHtml).join("")
+    : `<div class="empty"><h3>Nothing matches those filters</h3><p>Try widening or resetting them.</p></div>`;
+
+  $("pager").innerHTML = CURRENT.length
+    ? `<button ${state.page === 1 ? "disabled" : ""} data-p="${state.page - 1}">‹ Prev</button>
+       <span class="pinfo">Page ${state.page} of ${pages}</span>
+       <button ${state.page === pages ? "disabled" : ""} data-p="${state.page + 1}">Next ›</button>` : "";
+  renderList();
+}
+
+function renderList() {
+  $("listCount").textContent = myList.length ? `(${myList.length})` : "";
+  if (!myList.length) {
+    $("listBody").innerHTML = `<div class="hint" style="margin:0">
+      Add schools to see whether your list is balanced.</div>`;
+    return;
+  }
+  const cats = { likely: 0, target: 0, reach: 0, hard: 0, none: 0 };
+  myList.forEach(item => {
+    const s = findSchool(item.id) || item;
+    const c = classify(s);
+    cats[c || "none"]++;
+  });
+
+  const rows = [["likely", "Likely"], ["target", "Target"], ["reach", "Reach"],
+                ["hard", "Reach for everyone"], ["none", "No admit rate"]]
+    .filter(([k]) => cats[k])
+    .map(([k, label]) => `<div class="brow"><span style="color:var(--muted)">${label}</span>
+      <b>${cats[k]}</b></div>`).join("");
+
+  const safe = cats.likely;
+  const reachy = cats.reach + cats.hard;
+  let advice;
+  if (!safe && myList.length >= 3)
+    advice = `<div class="advice warn"><b>No likely schools on this list.</b> Every school here could
+      say no. Add at least one or two you'd be happy to attend and are very likely to get into.</div>`;
+  else if (reachy === 0 && myList.length >= 3)
+    advice = `<div class="advice ok">All comfortable. If there's somewhere you'd love to go,
+      there's room on this list to try for it.</div>`;
+  else
+    advice = `<div class="advice ok">${safe} likely · ${cats.target} target · ${reachy} reach.
+      A common shape is roughly a third in each.</div>`;
+
+  $("listBody").innerHTML =
+    `<div class="balance">${rows}</div>${advice}
+     <div style="margin-top:12px">` +
+    myList.map(item => {
+      const s = findSchool(item.id) || item;
+      return `<div class="listitem"><span>${s.name}</span>
+        <button data-del="${s.id}" title="Remove">×</button></div>`;
+    }).join("") +
+    `</div><div class="btnrow">
+       <button class="btn ghost" id="exportBtn">Export list</button>
+       <button class="btn ghost" id="clearBtn">Clear</button>
+     </div>`;
+}
+
+/* ---------- events ---------- */
+$("testType").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  [...$("testType").children].forEach(x => x.setAttribute("aria-pressed", x === b));
+  state.test = b.dataset.t;
+  $("score").placeholder = state.test === "act" ? "31" : "1400";
+  $("scoreHint").textContent = state.test === "act"
+    ? "ACT composite, 1–36." : "SAT total, 400–1600.";
+  state.page = 1; render();
+});
+$("score").addEventListener("input", e => { state.score = num(e.target.value); state.page = 1; render(); });
+$("q").addEventListener("input", e => { state.q = e.target.value.trim(); state.page = 1; render(); });
+[["fState", "stateF"], ["fControl", "control"]].forEach(([id, k]) =>
+  $(id).addEventListener("change", e => { state[k] = e.target.value; state.page = 1; render(); }));
+[["admMin", "admMin"], ["admMax", "admMax"], ["sizeMin", "sizeMin"],
+ ["sizeMax", "sizeMax"], ["tuitionMax", "tuitionMax"]].forEach(([id, k]) =>
+  $(id).addEventListener("input", e => { state[k] = num(e.target.value); state.page = 1; render(); }));
+$("onlyScored").addEventListener("change", e => { state.onlyScored = e.target.checked; state.page = 1; render(); });
+$("sort").addEventListener("change", e => { state.sort = e.target.value; state.page = 1; render(); });
+
+$("resetBtn").addEventListener("click", () => {
+  Object.assign(state, { q: "", stateF: "", control: "", admMin: null, admMax: null,
+    sizeMin: null, sizeMax: null, tuitionMax: null, onlyScored: false, page: 1 });
+  ["q", "fState", "fControl", "admMin", "admMax", "sizeMin", "sizeMax", "tuitionMax"]
+    .forEach(id => $(id).value = "");
+  $("onlyScored").checked = false;
+  render();
+});
+
+$("pager").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || b.disabled) return;
+  state.page = +b.dataset.p; render();
+  const m = document.querySelector("main");
+  if (m && m.scrollIntoView) m.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+$("results").addEventListener("click", e => {
+  const b = e.target.closest("[data-add]"); if (!b) return;
+  const id = b.dataset.add;
+  const i = myList.findIndex(x => sameId(x.id, id));
+  if (i >= 0) myList.splice(i, 1);
+  else {
+    const s = findSchool(id);
+    if (s) myList.push(s);
+  }
+  saveList(); render();
+});
+
+$("listBody").addEventListener("click", e => {
+  const del = e.target.closest("[data-del]");
+  if (del) { myList = myList.filter(x => !sameId(x.id, del.dataset.del)); saveList(); render(); return; }
+  if (e.target.closest("#clearBtn")) { myList = []; saveList(); render(); return; }
+  if (e.target.closest("#exportBtn")) exportList();
+});
+
+function exportList() {
+  if (!myList.length) return;
+  const esc = v => `"${String(v === null || v === undefined ? "" : v).replace(/"/g, '""')}"`;
+  const head = ["name", "city", "state", "control", "admit_rate", "sat25", "sat75",
+                "act25", "act75", "size", "tuition_in", "tuition_out", "grad_rate", "label"];
+  const lines = [head.join(",")];
+  myList.forEach(item => {
+    const s = findSchool(item.id) || item;
+    const c = classify(s);
+    lines.push([s.name, s.city, s.state, s.control,
+      s.admit_rate === null ? "" : (s.admit_rate * 100).toFixed(1) + "%",
+      s.sat25, s.sat75, s.act25, s.act75, s.size, s.tuition_in, s.tuition_out,
+      s.grad_rate === null ? "" : Math.round(s.grad_rate * 100) + "%",
+      c ? CHIP[c][0] : ""].map(esc).join(","));
+  });
+  const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "my-college-list.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`Exported ${myList.length} schools`);
+}
+
+$("themeBtn").addEventListener("click", () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  document.documentElement.setAttribute("data-theme", cur === "light" ? "dark" : "light");
+});
+
+let tt;
+function toast(m) {
+  const t = $("toast"); t.textContent = m; t.classList.add("show");
+  clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 1900);
+}
+
+/* ---------- loading ---------- */
+function install(schools, meta) {
+  SCHOOLS = schools; META = meta;
+  const states = [...new Set(schools.map(s => s.state).filter(Boolean))].sort();
+  const keep = $("fState").value;
+  $("fState").innerHTML = `<option value="">Any</option>` +
+    states.map(s => `<option>${s}</option>`).join("");
+  $("fState").value = states.includes(keep) ? keep : "";
+  myList = myList.map(item => findSchool(item.id) || item);
+  updateSrc(); state.page = 1; render();
+}
+
+function updateSrc() {
+  if (!SCHOOLS.length) {
+    $("srcLine").innerHTML = `<span class="tag none">Empty</span><br>No data loaded.
+      Run <b>get_college_data.py</b>, then drop <b>colleges.json</b> here.`;
+    return;
+  }
+  const src = (META && META.source) || "";
+  const upd = META && META.data_updated && !/^see /.test(META.data_updated) ? META.data_updated : null;
+  $("srcLine").innerHTML =
+    `<span class="tag real">${META && META.embedded ? "Built in" : "Loaded"}</span><br>
+     <b>${SCHOOLS.length.toLocaleString()}</b> four-year colleges<br>
+     <span style="font-size:11.5px">${src}${upd ? `<br>data released ${upd}` : ""}</span>`;
+}
+
+function loadText(txt, label) {
+  try {
+    const raw = JSON.parse(txt);
+    const list = Array.isArray(raw) ? raw : raw.schools;
+    if (!Array.isArray(list) || !list.length) throw new Error("no schools found in that file");
+    const clean = list.filter(s => s && s.name).map(s => ({
+      id: s.id, name: s.name, city: s.city || null, state: s.state || null,
+      control: s.control || null,
+      admit_rate: typeof s.admit_rate === "number" ? s.admit_rate : null,
+      sat25: s.sat25 || null, sat75: s.sat75 || null,
+      act25: s.act25 || null, act75: s.act75 || null,
+      size: s.size || null, tuition_in: s.tuition_in || null,
+      tuition_out: s.tuition_out || null, grad_rate: s.grad_rate || null,
+    }));
+    if (!clean.length) throw new Error("no usable rows");
+    install(clean, Array.isArray(raw) ? { source: label } : raw);
+    toast(`Loaded ${clean.length.toLocaleString()} colleges`);
+    return true;
+  } catch (e) {
+    toast("Could not load: " + e.message);
+    return false;
+  }
+}
+
+$("loadBtn").addEventListener("click", () => $("fileInput").click());
+$("fileInput").addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => loadText(r.result, f.name);
+  r.readAsText(f); e.target.value = "";
+});
+let depth = 0;
+document.addEventListener("dragenter", e => { e.preventDefault(); if (++depth === 1) document.body.classList.add("dragging"); });
+document.addEventListener("dragleave", e => { e.preventDefault(); if (--depth <= 0) { depth = 0; document.body.classList.remove("dragging"); } });
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => {
+  e.preventDefault(); depth = 0; document.body.classList.remove("dragging");
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (!f) return;
+  const r = new FileReader(); r.onload = () => loadText(r.result, f.name); r.readAsText(f);
+});
+
+/* ---------- boot ---------- */
+loadList();
+if (PACKED) {
+  install(unpack(PACKED), Object.assign({ embedded: true }, PACKED.meta || {}));
+} else {
+  updateSrc();
+  render();
+  // No data built in — pick up a sibling colleges.json when served over http.
+  if (typeof fetch === "function" && (location.protocol === "http:" || location.protocol === "https:")) {
+    fetch("colleges.json").then(r => r.ok ? r.text() : Promise.reject())
+      .then(t => loadText(t, "colleges.json")).catch(() => {});
+  }
+}
+</script>
+</body>
+</html>
