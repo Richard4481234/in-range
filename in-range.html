@@ -454,6 +454,7 @@
         range you'll see. These are institution-wide figures and don't reflect your major, your state, or
         anything an admissions officer reads in your file.
       </div>
+      <div id="similarBanner"></div>
       <div class="resbar">
         <div class="left" id="resCount"></div>
         <div style="display:flex;gap:8px;align-items:center">
@@ -579,8 +580,29 @@ const PER_PAGE = 25;
 const state = {
   test: "sat", score: null, q: "", stateF: "", control: "",
   admMin: null, admMax: null, sizeMin: null, sizeMax: null, costMax: null,
-  gradMin: null, onlyScored: false, sort: "selectivity", page: 1
+  gradMin: null, onlyScored: false, sort: "selectivity", page: 1, similarTo: null
 };
+
+/* "Schools like this one".
+   Most students can name a couple of dozen colleges; this file knows 1,715.
+   Distance is deliberately built from things a student actually feels —
+   how hard it is to get in, how big it is, what it costs, and whether people
+   finish — rather than from prestige or rankings, which this data has no
+   business asserting. */
+function similarity(a, b) {
+  let d = 0;
+  const num = (x, y, scale, weight) =>
+    (x === null || x === undefined || y === null || y === undefined)
+      ? 0.35 * weight                       // unknown: a mild penalty, not a veto
+      : weight * Math.abs(x - y) / scale;
+  d += num(a.admit_rate, b.admit_rate, 1, 3.0);
+  d += num(a.grad_rate, b.grad_rate, 1, 1.5);
+  d += num(a.cost, b.cost, 30000, 1.0);
+  if (a.size && b.size) d += 1.0 * Math.abs(Math.log10(a.size) - Math.log10(b.size));
+  else d += 0.35;
+  if (a.control !== b.control) d += 1.2;
+  return d;
+}
 
 /* ---------- persistence (best effort; harmless if unavailable) ---------- */
 function saveList() {
@@ -649,6 +671,18 @@ const CHIP = {
 
 /* ---------- filtering ---------- */
 function apply() {
+  if (state.similarTo !== null) {
+    const seed = findSchool(state.similarTo);
+    if (seed) {
+      return SCHOOLS
+        .filter(s => !sameId(s.id, seed.id) && s.admit_rate !== null)
+        .map(s => [similarity(seed, s), s])
+        .sort((x, y) => x[0] - y[0])
+        .slice(0, 12)
+        .map(p => p[1]);
+    }
+    state.similarTo = null;
+  }
   const q = state.q.toLowerCase();
   let out = SCHOOLS.filter(s => {
     if (q && !s.name.toLowerCase().includes(q) && !(s.city || "").toLowerCase().includes(q)) return false;
@@ -778,6 +812,7 @@ function schoolHtml(s) {
       <div class="meta">${bits.join(" · ") || "&nbsp;"}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${peopleLinkHtml(s)}
+        <button class="addbtn seebtn" data-similar="${s.id}">Similar schools →</button>
         <button class="addbtn ${inList ? "on" : ""}" data-add="${s.id}">${inList ? "✓ On my list" : "+ Add to list"}</button>
       </div>
     </div>
@@ -793,6 +828,14 @@ function render() {
     $("resCount").textContent = ""; $("pager").innerHTML = "";
     renderList(); return;
   }
+  const seed = state.similarTo !== null ? findSchool(state.similarTo) : null;
+  $("similarBanner").innerHTML = seed
+    ? `<div class="schoolfilter">
+         <div>Schools most like <b>${seed.name}</b> — by selectivity, size, cost and graduation rate</div>
+         <div><button data-clearsimilar="1">Back to all schools</button></div>
+       </div>`
+    : "";
+
   CURRENT = apply();
   const pages = Math.max(1, Math.ceil(CURRENT.length / PER_PAGE));
   if (state.page > pages) state.page = pages;
@@ -928,7 +971,7 @@ $("sort").addEventListener("change", e => { state.sort = e.target.value; state.p
 
 $("resetBtn").addEventListener("click", () => {
   Object.assign(state, { q: "", stateF: "", control: "", admMin: null, admMax: null,
-    sizeMin: null, sizeMax: null, costMax: null, gradMin: null, onlyScored: false, page: 1 });
+    sizeMin: null, sizeMax: null, costMax: null, gradMin: null, onlyScored: false, page: 1, similarTo: null });
   ["q", "fState", "fControl", "admMin", "admMax", "sizeMin", "sizeMax", "costMax", "gradMin"]
     .forEach(id => $(id).value = "");
   $("onlyScored").checked = false;
@@ -940,6 +983,19 @@ $("pager").addEventListener("click", e => {
   state.page = +b.dataset.p; render();
   const m = document.querySelector("main");
   if (m && m.scrollIntoView) m.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+$("results").addEventListener("click", e => {
+  const sim = e.target.closest("[data-similar]"); if (!sim) return;
+  state.similarTo = sim.dataset.similar;
+  state.page = 1;
+  render();
+  const m = document.querySelector("main");
+  if (m && m.scrollIntoView) m.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+$("similarBanner").addEventListener("click", e => {
+  if (!e.target.closest("[data-clearsimilar]")) return;
+  state.similarTo = null; state.page = 1; render();
 });
 
 /* college card -> the applicants who applied there */
@@ -1377,6 +1433,7 @@ function writeUrl() {
   });
   if (state.onlyScored) q.set("scored", "1");
   if (state.sort !== "selectivity") q.set("sort", state.sort);
+  if (state.similarTo !== null) q.set("similar", state.similarTo);
   if (pState.school) q.set("school", pState.school);
   if (pState.outcome) q.set("out", pState.outcome);
   if (pState.band !== "standard") q.set("band", pState.band);
@@ -1400,6 +1457,7 @@ function readUrl() {
   state.costMax = n("cmax"); state.gradMin = n("gmin");
   state.onlyScored = q.get("scored") === "1";
   if (q.get("sort")) state.sort = q.get("sort");
+  state.similarTo = q.get("similar") || null;
   pState.school = q.get("school") || "";
   pState.outcome = q.get("out") || "";
   if (P_BANDS[q.get("band")] !== undefined) pState.band = q.get("band");
